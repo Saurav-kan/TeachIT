@@ -1,0 +1,158 @@
+import { Board } from './board.js';
+
+const $=id=>document.getElementById(id);
+const state={mode:'learn',running:false,elapsed:0,startTime:0,duration:600,hints:false,topic:'How photosynthesis works',materials:'',notes:[],analyses:0,lastResult:null,live:false,vision:false,busy:false,epoch:0,lastCall:0,lastSent:'',previousBoard:null,boardRevision:-1,changedAt:0,autoTimer:null,stream:null,recognition:null,micWanted:false,boardVisible:true};
+const board=new Board($('whiteboard'),()=>{
+  $('boardEmpty').hidden=board.strokes.length>0;
+  $('boardState').textContent='Changes saved locally';
+  state.changedAt=Date.now();scheduleAnalysis();
+});
+function notice(text,error=false){$('notice').textContent=text;$('notice').classList.toggle('error',error);}
+function signature(){return `${$('transcript').value.trim()}|${state.boardVisible?board.revision:'hidden'}`;}
+function scheduleAnalysis(){
+  clearTimeout(state.autoTimer);
+  if(!state.running)return;
+  const delay=Math.max(2000,20000-(Date.now()-state.lastCall));
+  state.autoTimer=setTimeout(()=>{
+    if(!state.running || state.busy || board.current)return;
+    if(signature()!==state.lastSent && $('transcript').value.trim().split(/\s+/).length>=12) analyze(false,true);
+  },delay);
+}
+function renderNotes(){
+  const container=$('notes');
+  if(!state.notes.length){container.replaceChildren();const p=document.createElement('p');p.className='form-caption';p.textContent='Your ideas will land here. One explanation at a time.';container.append(p);}
+  else{container.replaceChildren(...state.notes.map(n=>{const div=document.createElement('div');div.className='note';const title=document.createElement('h4');title.textContent=n.term;const p=document.createElement('p');p.textContent=n.definition;div.append(title,p);return div;}));}
+  $('noteCount').textContent=`${state.notes.length} concept${state.notes.length===1?'':'s'} captured`;
+}
+function applyResult(result){
+  state.lastResult=result;state.analyses++;
+  for(const note of result.notes){const existing=state.notes.find(n=>n.term.toLowerCase()===note.term.toLowerCase());if(existing)existing.definition=note.definition;else state.notes.push(note);}
+  renderNotes();
+  $('questionInitial').textContent=result.student[0];
+  $('questionLabel').textContent=`${result.student.toUpperCase()} HAS A QUESTION${result.source==='demo'?' · SCRIPTED DEMO':''}`;
+  $('questionText').textContent=result.question;
+  document.querySelectorAll('.student-card').forEach(el=>el.classList.toggle('asking',el.dataset.student===result.student));
+  if(result.hint)$('tip').textContent=result.hint;else $('tip').textContent=result.feedback;
+  $('notesLabel').textContent=result.source==='demo'?'DEMO':'LIVE';
+  notice(result.source==='demo'?'Demo classroom: questions follow a sample script; no AI evaluation or drawing interpretation occurred.':`Classroom updated. ${result.boardSeen?'Whiteboard included.':'Text-only analysis; drawings were not interpreted.'}`);
+}
+function demoResult(hint){
+  const text=$('transcript').value.trim();
+  const sample=state.topic.toLowerCase().includes('photosynthesis')&&/chlorophyll/i.test(text);
+  const sentences=text.match(/[^.!?]+[.!?]?/g)||[text];
+  let notes=sentences.slice(0,4).map((s,i)=>({term:`Idea ${i+1}`,definition:s.trim()}));
+  let question=`Could you give us a concrete example of ${state.topic.toLowerCase()} and walk through why it works?`;
+  if(sample){
+    const candidates=[['Photosynthesis','Plants use sunlight to turn water and carbon dioxide into glucose.','glucose'],['Chlorophyll','Chlorophyll absorbs light energy in the chloroplasts.','chloroplast'],['Oxygen','Oxygen is released as a byproduct.','byproduct']];
+    notes=candidates.filter(x=>text.toLowerCase().includes(x[2])).map(([term,definition])=>({term,definition}));
+    question=['You said sunlight provides energy. How is that energy stored in the glucose?','How do the water and carbon dioxide actually reach the chloroplasts?','If a plant gets water and carbon dioxide but no light, what changes?'][state.analyses%3];
+  }
+  return {student:['Maya','Leo','Sam'][state.analyses%3],question,notes,score:null,feedback:'Try connecting each step with “because,” then explain it using an example.',hint:hint?'Start with the inputs, follow what changes, then describe the result.':null,source:'demo',boardSeen:false};
+}
+async function analyze(hint=false,automatic=false){
+  if(state.busy)return;
+  if(state.mode==='test'&&hint&&!state.hints)return;
+  const transcript=$('transcript').value.trim();
+  if(transcript.length<20){if(!automatic)notice('Add a few sentences first so your students have something to ask about.');return;}
+  if(state.live && Date.now()-state.lastCall<20000){if(!automatic)notice('Let’s give the next explanation a little room. Please wait 20 seconds between analyses.');scheduleAnalysis();return;}
+  const epoch=state.epoch;state.busy=true;state.lastCall=Date.now();
+  const sentSignature=signature();const revision=board.revision;
+  const includeBoard=state.vision&&state.boardVisible&&(board.strokes.length>0||state.previousBoard);
+  const image=includeBoard?board.snapshot():undefined;
+  $('analyzeBtn').disabled=true;$('hintBtn').disabled=true;$('analyzeBtn').textContent='Students are thinking…';
+  try{
+    let result;
+    if(state.live){
+      const response=await fetch('/api/analyze',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({topic:state.topic,materials:state.materials,transcript:transcript.slice(-20000),mode:state.mode,hints:state.mode==='learn'||state.hints,requestHint:hint,notes:state.notes.slice(-20),question:state.lastResult?.question,events:state.boardVisible?board.events.slice(-100):[],board:image,previousBoard:includeBoard&&revision!==state.boardRevision?state.previousBoard:undefined,recencyBoard:includeBoard&&$('recencyInput').checked?board.snapshot(true):undefined})});
+      result=await response.json();if(!response.ok)throw Error(result.error||'Classroom analysis failed.');
+    }else result=demoResult(hint);
+    if(epoch!==state.epoch)return;
+    if(state.mode==='test'&&!state.hints)result.hint=null;
+    applyResult(result);state.lastSent=sentSignature;state.boardRevision=revision;
+    if(image)state.previousBoard=image;
+    $('boardState').textContent=result.boardSeen?'Shared with the classroom':'Saved locally';
+    $('captureStatus').textContent=state.live?`Analysis ${state.analyses} · ${result.boardSeen?'board + explanation':'explanation only'}`:`Demo analysis ${state.analyses} · no API charges`;
+  }catch(error){notice(error.message,true);}
+  finally{state.busy=false;$('analyzeBtn').disabled=false;$('analyzeBtn').textContent='Ask the classroom ↗';$('hintBtn').disabled=state.mode==='test'&&!state.hints;scheduleAnalysis();}
+}
+function elapsed(){return state.elapsed+(state.running?(Date.now()-state.startTime)/1000:0);}
+function renderClock(){
+  const seconds=Math.max(0,Math.floor(state.mode==='test'?state.duration-elapsed():elapsed()));
+  $('clock').textContent=`${String(Math.floor(seconds/60)).padStart(2,'0')}:${String(seconds%60).padStart(2,'0')}`;
+  if(state.running&&state.mode==='test'&&seconds===0){finish();notice('Time is up. Your session is ready to review.');}
+}
+function updateRunning(){
+  document.body.classList.toggle('running',state.running);
+  $('startBtn').textContent=state.running?'Ⅱ Pause teaching':state.elapsed>0?'▶ Resume teaching':'▶ Start teaching';
+  $('audienceStatus').textContent=state.running?'Listening':'Ready to listen';
+  $('learnMode').disabled=state.running||state.elapsed>0;$('testMode').disabled=state.running||state.elapsed>0;
+}
+function pause(){if(state.running){state.elapsed=elapsed();state.running=false;}clearTimeout(state.autoTimer);stopMic();updateRunning();renderClock();}
+$('startBtn').onclick=()=>{
+  if(state.running){pause();return;}
+  if(state.mode==='test'&&state.elapsed>=state.duration){notice('This timed session has ended. Start a new lesson to try again.');return;}
+  state.running=true;state.startTime=Date.now();updateRunning();scheduleAnalysis();
+  notice(state.live?'Classroom started. Explain your topic, then pause to let your students respond.':'Demo classroom started. Try the sample explanation to see the intended flow.');
+};
+setInterval(renderClock,1000);
+function setMode(mode){if(state.running||state.elapsed>0)return;state.mode=mode;$('learnMode').classList.toggle('active',mode==='learn');$('testMode').classList.toggle('active',mode==='test');$('learnMode').setAttribute('aria-pressed',mode==='learn');$('testMode').setAttribute('aria-pressed',mode==='test');$('clockLabel').textContent=mode==='learn'?'Self-paced':'Time remaining';$('hintBtn').disabled=mode==='test'&&!state.hints;renderClock();}
+$('learnMode').onclick=()=>setMode('learn');$('testMode').onclick=()=>setMode('test');
+function finish(){pause();stopCamera();$('reviewScore').textContent=state.lastResult?.score==null?'—':`${state.lastResult.score}/100`;$('reviewFeedback').textContent=state.lastResult?.feedback||'No classroom feedback yet. Explain a topic and ask your students a question.';$('reviewConcepts').textContent=state.notes.length;$('reviewRequests').textContent=state.analyses;$('reviewSource').textContent=state.live?'Provisional AI practice feedback, not a validated exam grade. Integrity detection is not implemented.':'Demo results. No real AI grading or drawing interpretation. Integrity detection is not implemented.';$('reviewDialog').showModal();}
+$('endBtn').onclick=finish;$('reviewNav').onclick=finish;
+$('analyzeBtn').onclick=()=>analyze();$('hintBtn').onclick=()=>analyze(true);
+$('transcript').oninput=()=>{state.changedAt=Date.now();scheduleAnalysis();};
+$('sampleBtn').onclick=()=>{
+  if(state.topic!=='How photosynthesis works'){notice('Start a new lesson with the default photosynthesis topic to try the sample.');return;}
+  $('transcript').value='Plants use sunlight to turn water and carbon dioxide into glucose. This process is called photosynthesis. Chlorophyll absorbs light energy in the chloroplasts. The glucose stores chemical energy that the plant can use to grow. Oxygen is released as a byproduct.';
+  analyze();
+};
+function openSetup(){if(state.busy){notice('Wait for the classroom to finish thinking before changing your lesson.');return;}pause();$('topicInput').value=state.topic;$('materialsInput').value=state.materials;$('durationInput').value=state.duration/60;$('hintsInput').checked=state.hints;$('setupDialog').showModal();}
+$('newLesson').onclick=openSetup;$('settingsBtn').onclick=openSetup;$('materialsNav').onclick=openSetup;
+$('classroomNav').onclick=()=>window.scrollTo({top:0,behavior:'smooth'});
+$('setupForm').onsubmit=e=>{
+  e.preventDefault();const topic=$('topicInput').value.trim();if(!topic)return;
+  state.epoch++;state.elapsed=0;state.lastCall=0;state.lastSent='';state.previousBoard=null;state.boardRevision=-1;state.notes=[];state.analyses=0;state.lastResult=null;
+  state.topic=topic;state.materials=$('materialsInput').value.slice(0,18000);state.duration=Number($('durationInput').value)*60;state.hints=$('hintsInput').checked;
+  board.clear();$('transcript').value='';$('lessonTitle').textContent=topic;$('transcript').placeholder=`How would you explain ${topic.toLowerCase()}?`;
+  $('questionText').textContent='Start explaining, and your students will help you find the gaps.';$('questionLabel').textContent='A QUESTION IS A NEW CONNECTION';$('questionInitial').textContent='?';
+  document.querySelectorAll('.student-card').forEach(el=>el.classList.remove('asking'));
+  $('tip').textContent='Try explaining it like your students are hearing it for the first time.';
+  renderNotes();setMode(state.mode);updateRunning();$('setupDialog').close();notice('Lesson ready. Your classroom is yours.');
+};
+$('upload').onchange=async e=>{
+  const files=Array.from(e.target.files);let text=$('materialsInput').value;
+  for(const file of files){if(file.size>100000 || !/\.(txt|md)$/i.test(file.name)){notice('Please choose .txt or .md files smaller than 100 KB.',true);continue;}text+=`\n\n${file.name}\n${await file.text()}`;}
+  $('materialsInput').value=text.slice(0,18000);$('uploadStatus').textContent=`${files.length} file(s) selected. Source notes limited to 18,000 characters.`;e.target.value='';
+};
+document.querySelectorAll('[data-close]').forEach(button=>button.onclick=()=>button.closest('dialog').close());
+$('toggleBoard').onclick=()=>{state.boardVisible=!state.boardVisible;$('boardCard').classList.toggle('board-hidden',!state.boardVisible);$('toggleBoard').textContent=state.boardVisible?'Hide board ↗':'Show board ↗';if(state.boardVisible)board.render();};
+$('pen').onclick=()=>{board.tool='pen';$('pen').classList.add('active');$('eraser').classList.remove('active');};
+$('eraser').onclick=()=>{board.tool='eraser';$('eraser').classList.add('active');$('pen').classList.remove('active');};
+document.querySelectorAll('[data-color]').forEach(button=>button.onclick=()=>{board.color=button.dataset.color;$('pen').click();document.querySelectorAll('[data-color]').forEach(b=>b.classList.toggle('active',b===button));});
+$('undo').onclick=()=>board.undo();$('clear').onclick=()=>board.clear();
+$('recencyBtn').onclick=()=>{$('aiPreview').src=board.snapshot(true);$('aiDialog').showModal();};
+function download(){
+  const content=`# ${state.topic}\n\nMode: ${state.mode==='learn'?'Learn IT':'Test IT'}\nSource: ${state.live?'AI classroom':'Scripted demo'}\n\n## Student notes\n\n${state.notes.map(n=>`### ${n.term}\n${n.definition}`).join('\n\n')}\n\n## Latest question\n${state.lastResult?.question||'No question yet.'}\n\n## Feedback\n${state.lastResult?.feedback||'No feedback yet.'}\n\n## Explanation\n${$('transcript').value}\n`;
+  const url=URL.createObjectURL(new Blob([content],{type:'text/markdown'}));const a=document.createElement('a');a.href=url;a.download='TeachIT-session.md';a.click();setTimeout(()=>URL.revokeObjectURL(url),1000);
+}
+$('download').onclick=download;$('reviewDownload').onclick=download;
+function stopCamera(){state.stream?.getTracks().forEach(track=>track.stop());state.stream=null;$('camera').srcObject=null;$('camera').hidden=true;$('cameraPlaceholder').hidden=false;$('cameraStop').hidden=true;}
+$('cameraStart').onclick=async()=>{
+  if(!navigator.mediaDevices?.getUserMedia){notice('Camera access is unavailable here. Try opening the classroom in Edge or Chrome.',true);return;}
+  try{state.stream=await navigator.mediaDevices.getUserMedia({video:true,audio:false});$('camera').srcObject=state.stream;$('camera').hidden=false;$('cameraPlaceholder').hidden=true;$('cameraStop').hidden=false;notice('Camera preview is local. Video is not recorded or sent to the model.');}catch{notice('Camera access was not granted. You can keep teaching without it.',true);}
+};
+$('cameraStop').onclick=stopCamera;
+function stopMic(){state.micWanted=false;state.recognition?.stop();state.recognition=null;$('micBtn').textContent='♩ Mic off';$('transcriptStatus').textContent='Speak with the mic, or type here';}
+$('micBtn').onclick=()=>{
+  if(state.micWanted){stopMic();return;}
+  const Recognition=window.SpeechRecognition||window.webkitSpeechRecognition;
+  if(!Recognition){notice('Live captions are unavailable in this browser. Type your explanation, or use Chrome/Edge.',true);return;}
+  const recognition=new Recognition();recognition.continuous=true;recognition.interimResults=false;recognition.lang='en-US';state.recognition=recognition;state.micWanted=true;
+  recognition.onresult=e=>{for(let i=e.resultIndex;i<e.results.length;i++)if(e.results[i].isFinal)$('transcript').value+=`${$('transcript').value?' ':''}${e.results[i][0].transcript}`;scheduleAnalysis();};
+  recognition.onerror=e=>{stopMic();notice(`Captions stopped (${e.error}). You can continue by typing.`,true);};
+  recognition.onend=()=>{if(state.micWanted){try{recognition.start();}catch{stopMic();}}};
+  try{recognition.start();$('micBtn').textContent='● Mic on';$('transcriptStatus').textContent='Capturing spoken explanation';notice('Browser speech recognition is on. Your browser may use its own cloud speech service.');}catch{stopMic();notice('Could not start speech recognition. Try Chrome or Edge.',true);}
+};
+$('speakQuestion').onclick=()=>{if(!('speechSynthesis'in window)){notice('Speech playback is unavailable in this browser.');return;}speechSynthesis.cancel();speechSynthesis.speak(new SpeechSynthesisUtterance($('questionText').textContent));};
+window.addEventListener('pagehide',()=>{stopCamera();stopMic();});
+try{const response=await fetch('/api/config');if(!response.ok)throw Error();const config=await response.json();state.live=config.live;state.vision=config.vision;$('connection').textContent=config.live?'● AI connected':'● Demo mode';$('connection').title=config.live?config.model:'No API key configured';if(config.live)$('captureStatus').textContent=config.vision?'Selected board snapshots + explanation on analysis.':'Text-only mode · enable vision after verifying model support.';}catch{notice('Could not connect to the local server. Restart with npm start.',true);}
