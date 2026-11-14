@@ -2,12 +2,15 @@ import { Board } from './board.js';
 import { Microphone } from './microphone.js';
 import { Captions } from './captions.js';
 import { AnalysisTrigger } from './analysis-trigger.js';
+import { sourceDocuments } from './evidence.js';
+import { advanceQuestion, answerSinceQuestion } from './questions.js';
 
 const $=id=>document.getElementById(id);
+const questionOpen=()=>state.activeQuestion&&state.activeQuestion.status!=='answered';
 const state={mode:'learn',running:false,elapsed:0,startTime:0,duration:600,hints:false,topic:'How photosynthesis works',materials:'',notes:[],analyses:0,lastResult:null,live:false,vision:false,busy:false,epoch:0,lastCall:0,lastSent:'',previousBoard:null,boardRevision:-1,changedAt:0,autoTimer:null,stream:null,recognition:null,micWanted:false,boardVisible:true};
 const microphone=new Microphone({onState:renderMicrophoneState,onLevel:renderMicrophoneLevel});
 const captions=new Captions({createRecognition:()=>{const Recognition=window.SpeechRecognition||window.webkitSpeechRecognition;if(!Recognition)throw Error('Unavailable');return new Recognition();},onText:receiveCaptionText,onState:renderCaptionState});
-const analysisTrigger=new AnalysisTrigger({ready:()=>state.running&&!state.busy&&!state.autoBlocked&&!board.current&&$('transcript').value.trim().split(/\s+/).length>=12&&signature()!==state.lastSent,run:()=>analyze(false,true),delay:()=>Math.max(1500,20000-(Date.now()-state.lastCall))});
+const analysisTrigger=new AnalysisTrigger({ready:()=>(state.running||questionOpen())&&!state.busy&&!state.autoBlocked&&!board.current&&$('transcript').value.trim().split(/\s+/).length>=12&&signature()!==state.lastSent,run:()=>analyze(false,true),delay:()=>Math.max(1500,20000-(Date.now()-state.lastCall))});
 const board=new Board($('whiteboard'),()=>{
   $('boardEmpty').hidden=board.strokes.length>0;
   $('boardState').textContent='Changes saved locally';
@@ -16,7 +19,7 @@ const board=new Board($('whiteboard'),()=>{
 function notice(text,error=false){$('notice').textContent=text;$('notice').classList.toggle('error',error);}
 function signature(){return `${$('transcript').value.trim()}|${state.boardVisible?board.revision:'hidden'}`;}
 function scheduleAnalysis(){
-  if(!state.running||state.busy||state.autoBlocked)return;
+  if((!state.running&&!questionOpen())||state.busy||state.autoBlocked)return;
   const words=$('transcript').value.trim().split(/\s+/).filter(Boolean).length;
   if(words<12){classroomStatus(`Waiting for explanation · ${words}/12 words`);return;}
   if(signature()===state.lastSent)return;
@@ -42,26 +45,50 @@ function renderNotes(){
   else{container.replaceChildren(...state.notes.map(n=>{const div=document.createElement('div');div.className='note';const title=document.createElement('h4');title.textContent=n.term;const p=document.createElement('p');p.textContent=n.definition;div.append(title,p);return div;}));}
   $('noteCount').textContent=`${state.notes.length} concept${state.notes.length===1?'':'s'} captured`;
 }
-function applyResult(result){
+function applyResult(result,sentTranscript){
   state.lastResult=result;state.analyses++;
   for(const note of result.notes){const existing=state.notes.find(n=>n.term.toLowerCase()===note.term.toLowerCase());if(existing)existing.definition=note.definition;else state.notes.push(note);}
   renderNotes();
-  $('questionInitial').textContent=result.student[0];
-  $('questionLabel').textContent=`${result.student.toUpperCase()} HAS A QUESTION${result.source==='demo'?' · SCRIPTED DEMO':''}`;
-  $('questionText').textContent=result.question;
-  setQuestionPending(true,result.student);
-  document.querySelectorAll('.student-card').forEach(el=>el.classList.toggle('asking',el.dataset.student===result.student));
+  const previous=state.activeQuestion;
+  state.activeQuestion=advanceQuestion(previous,result,sentTranscript,`question-${state.epoch}-${state.analyses}`);
+  if(previous?.id===state.activeQuestion?.id&&previous.status!=='answered'&&state.activeQuestion.status==='answered'){
+    state.answerHistory??=[];state.answerHistory.push({...state.activeQuestion});
+    $('answerReceipt').hidden=true;
+  }
+  if(previous?.status==='answered'&&previous.id!==state.activeQuestion?.id){$('answerReceipt').hidden=false;$('answerReceipt').textContent=`✓ Previous question answered correctly · ${previous.feedback||'Answer accepted by the AI classroom.'}`;}
+  renderQuestion(previous?.id!==state.activeQuestion?.id);
+  state.factChecks??=[];
+  for(const check of result.factChecks||[]){const index=state.factChecks.findIndex(c=>c.claim.toLowerCase()===check.claim.toLowerCase());if(index<0)state.factChecks.push(check);else state.factChecks[index]=check;}
+  renderFactChecks();
   if(result.hint)$('tip').textContent=result.hint;else $('tip').textContent=result.feedback;
   $('notesLabel').textContent=result.source==='demo'?'DEMO':'LIVE';
   notice(result.source==='demo'?'Demo classroom: questions follow a sample script; no AI evaluation or drawing interpretation occurred.':`Classroom updated. ${result.boardSeen?'Whiteboard included.':'Text-only analysis; drawings were not interpreted.'}`);
 }
-function setQuestionPending(pending,student=''){
+function renderQuestion(arrival=false){
+  const q=state.activeQuestion;if(!q)return;
+  const answered=q.status==='answered';
+  const labels={waiting:'Awaiting your answer',answering:'Listening for your answer',partial:'Partly answered',incorrect:'Try again',answered:'✓ Answered correctly'};
+  $('questionInitial').textContent=q.student[0];$('questionLabel').textContent=`${q.student.toUpperCase()}${answered?' · ANSWER ACCEPTED':' HAS A QUESTION'}${state.live?'':' · SCRIPTED DEMO'}`;
+  $('questionText').textContent=q.question;
+  $('answerStatus').hidden=false;$('answerStatus').textContent=labels[q.status];$('answerStatus').dataset.status=q.status;
+  $('answerFeedback').hidden=!q.feedback;$('answerFeedback').textContent=q.feedback;
+  $('answerEvidence').hidden=!q.evidence;$('answerEvidence').textContent=q.evidence?`You said: “${q.evidence}”`:'';
+  document.body.classList.toggle('question-answered',answered);
+  setQuestionPending(!answered,q.student,arrival);
+  $('questionAlert').hidden=false;
+  $('questionAlertText').textContent=answered?`${q.student} · Answered correctly`:`${q.student} · ${labels[q.status]}`;
+  $('questionAlertIcon').textContent=answered?'✓':'!';
+  $('acknowledgeQuestion').hidden=answered||q.status==='answering';
+  $('checkAnswer').hidden=answered;
+  document.querySelectorAll('.student-card').forEach(el=>el.classList.toggle('asking',!answered&&el.dataset.student===q.student));
+}
+function setQuestionPending(pending,student='',arrival=true){
   document.body.classList.toggle('question-pending',pending);
   $('questionAlert').hidden=!pending;
   $('questionAlertText').textContent=pending?`${student} has a question`:'';
   $('acknowledgeQuestion').hidden=!pending;
   $('boardCard').classList.remove('question-arrival');
-  if(pending){void $('boardCard').offsetWidth;$('boardCard').classList.add('question-arrival');}
+  if(pending&&arrival){void $('boardCard').offsetWidth;$('boardCard').classList.add('question-arrival');}
 }
 $('questionAlert').onclick=()=>{
   const card=$('questionCard');
@@ -70,7 +97,30 @@ $('questionAlert').onclick=()=>{
   window.scrollTo({top:Math.max(0,top),behavior:window.matchMedia('(prefers-reduced-motion: reduce)').matches?'instant':'smooth'});
   card.focus({preventScroll:true});
 };
-$('acknowledgeQuestion').onclick=()=>setQuestionPending(false);
+$('acknowledgeQuestion').onclick=()=>{if(questionOpen()){state.activeQuestion.status='answering';renderQuestion();scheduleAnalysis();}};
+$('checkAnswer').onclick=()=>analyze();
+function renderFactChecks(){
+  const container=$('factChecks');container.replaceChildren();
+  const withheld=state.mode==='test'&&!state.hints&&!state.reviewing;
+  $('factCheckSummary').textContent=withheld?'Available after your test':!state.live?'Live source checks require an AI connection':!state.factChecks?.length?'No claims checked yet':'AI checks against your materials';
+  if(withheld)return;
+  for(const check of (state.factChecks||[]).slice(-8).reverse()){
+    const card=document.createElement('article');card.className=`fact-check ${check.verdict}`;
+    const label=document.createElement('strong');label.textContent=({contradicted:'↗ Conflicts with your material',supported:'✓ Supported by your material',unverified:'? Needs verification'})[check.verdict];
+    const claim=document.createElement('p');claim.textContent=`“${check.claim}”`;
+    const explanation=document.createElement('p');explanation.textContent=check.explanation;
+    card.append(label,claim,explanation);
+    if(!check.citations.length){const topic=document.createElement('small');topic.textContent=`Review: ${check.reviewTopic}. Add a relevant source to check this claim.`;card.append(topic);}
+    for(const citation of check.citations){const button=document.createElement('button');button.className='source-link';button.textContent=`${citation.sourceName} · lines ${citation.lineStart}–${citation.lineEnd} ↗`;button.onclick=()=>openSource(citation);card.append(button);}
+    container.append(card);
+  }
+}
+function openSource(citation){
+  const doc=sourceDocuments(state.materials).find(d=>d.id===citation.sourceId);if(!doc)return;
+  $('sourceTitle').textContent=doc.name;$('sourceLines').replaceChildren();
+  doc.lines.forEach((text,i)=>{const line=document.createElement('div');line.className='source-line';line.dataset.line=i+1;line.classList.toggle('cited',i+1>=citation.lineStart&&i+1<=citation.lineEnd);const number=document.createElement('span');number.textContent=i+1;const content=document.createElement('span');content.textContent=text||' ';line.append(number,content);$('sourceLines').append(line);});
+  $('sourceDialog').showModal();$('sourceLines').querySelector('.cited')?.scrollIntoView({block:'center'});
+}
 function demoResult(hint){
   const text=$('transcript').value.trim();
   const sample=state.topic.toLowerCase().includes('photosynthesis')&&/chlorophyll/i.test(text);
@@ -91,20 +141,20 @@ async function analyze(hint=false,automatic=false){
   if(transcript.length<20){if(!automatic){classroomStatus('Add a few sentences first');notice('Add a few sentences first so your students have something to ask about.');}return;}
   if(state.live && Date.now()-state.lastCall<20000){if(!automatic)notice('Let’s give the next explanation a little room. Please wait 20 seconds between analyses.');scheduleAnalysis();return;}
   const epoch=state.epoch;state.autoBlocked=false;state.busy=true;state.lastCall=Date.now();analysisTrigger.cancel();classroomStatus('Reading your explanation…');
-  const sentSignature=signature();const revision=board.revision;
+  const sentSignature=signature();const sentTranscript=transcript;const revision=board.revision;
   const includeBoard=state.vision&&state.boardVisible&&(board.strokes.length>0||state.previousBoard);
   const image=includeBoard?board.snapshot():undefined;
   $('analyzeBtn').disabled=true;$('hintBtn').disabled=true;$('analyzeBtn').textContent='Students are thinking…';
   try{
     let result;
     if(state.live){
-      const response=await fetch('/api/analyze',{method:'POST',headers:{'Content-Type':'application/json'},signal:AbortSignal.timeout(65000),body:JSON.stringify({topic:state.topic,materials:state.materials,transcript:transcript.slice(-20000),mode:state.mode,hints:state.mode==='learn'||state.hints,requestHint:hint,notes:state.notes.slice(-20),question:state.lastResult?.question,events:state.boardVisible?board.events.slice(-100):[],board:image,previousBoard:includeBoard&&revision!==state.boardRevision?state.previousBoard:undefined,recencyBoard:includeBoard&&$('recencyInput').checked?board.snapshot(true):undefined})});
+      const response=await fetch('/api/analyze',{method:'POST',headers:{'Content-Type':'application/json'},signal:AbortSignal.timeout(65000),body:JSON.stringify({topic:state.topic,materials:state.materials,transcript:transcript.slice(-20000),mode:state.mode,hints:state.mode==='learn'||state.hints,requestHint:hint,notes:state.notes.slice(-20),question:state.activeQuestion?.question,questionContext:questionOpen()?{id:state.activeQuestion.id,question:state.activeQuestion.question,student:state.activeQuestion.student,answerSinceQuestion:answerSinceQuestion(state.activeQuestion,transcript)}:null,events:state.boardVisible?board.events.slice(-100):[],board:image,previousBoard:includeBoard&&revision!==state.boardRevision?state.previousBoard:undefined,recencyBoard:includeBoard&&$('recencyInput').checked?board.snapshot(true):undefined})});
       result=await response.json();if(!response.ok)throw Error(result.error||'Classroom analysis failed.');
     }else result=demoResult(hint);
     if(epoch!==state.epoch)return;
     if(state.mode==='test'&&!state.hints)result.hint=null;
-    applyResult(result);state.lastSent=sentSignature;state.boardRevision=revision;
-    classroomStatus(`Updated · ${state.notes.length} concepts · ${state.analyses} ${state.analyses===1?'analysis':'analyses'}`);if(state.live)$('connection').textContent='● AI connected';
+    applyResult(result,sentTranscript);state.lastSent=sentSignature;state.boardRevision=revision;
+    classroomStatus(`Updated · ${state.notes.length} concept${state.notes.length===1?'':'s'} · ${state.analyses} ${state.analyses===1?'analysis':'analyses'}`);if(state.live)$('connection').textContent='● AI connected';
     if(image)state.previousBoard=image;
     $('boardState').textContent=result.boardSeen?'Shared with the classroom':'Saved locally';
     $('captureStatus').textContent=state.live?`Analysis ${state.analyses} · ${result.boardSeen?'board + explanation':'explanation only'}`:`Demo analysis ${state.analyses} · no API charges`;
@@ -128,14 +178,14 @@ function pause(){if(state.running){state.elapsed=elapsed();state.running=false;}
 $('startBtn').onclick=async()=>{
   if(state.running){pause();return;}
   if(state.mode==='test'&&state.elapsed>=state.duration){notice('This timed session has ended. Start a new lesson to try again.');return;}
-  state.running=true;state.startTime=Date.now();updateRunning();scheduleAnalysis();
+  state.reviewing=false;renderFactChecks();state.running=true;state.startTime=Date.now();updateRunning();scheduleAnalysis();
   notice(state.live?'Classroom started. Explain your topic, then pause to let your students respond.':'Demo classroom started. Try the sample explanation to see the intended flow.');
   if(microphone.status!=='live')await enableMic();
 };
 setInterval(renderClock,1000);
-function setMode(mode){if(state.running||state.elapsed>0)return;state.mode=mode;$('learnMode').classList.toggle('active',mode==='learn');$('testMode').classList.toggle('active',mode==='test');$('learnMode').setAttribute('aria-pressed',mode==='learn');$('testMode').setAttribute('aria-pressed',mode==='test');$('clockLabel').textContent=mode==='learn'?'Self-paced':'Time remaining';$('hintBtn').disabled=mode==='test'&&!state.hints;renderClock();}
+function setMode(mode){if(state.running||state.elapsed>0)return;state.mode=mode;$('learnMode').classList.toggle('active',mode==='learn');$('testMode').classList.toggle('active',mode==='test');$('learnMode').setAttribute('aria-pressed',mode==='learn');$('testMode').setAttribute('aria-pressed',mode==='test');$('clockLabel').textContent=mode==='learn'?'Self-paced':'Time remaining';$('hintBtn').disabled=mode==='test'&&!state.hints;renderClock();renderFactChecks();}
 $('learnMode').onclick=()=>setMode('learn');$('testMode').onclick=()=>setMode('test');
-function finish(){pause();stopCamera();$('reviewScore').textContent=state.lastResult?.score==null?'—':`${state.lastResult.score}/100`;$('reviewFeedback').textContent=state.lastResult?.feedback||'No classroom feedback yet. Explain a topic and ask your students a question.';$('reviewConcepts').textContent=state.notes.length;$('reviewRequests').textContent=state.analyses;$('reviewSource').textContent=state.live?'Provisional AI practice feedback, not a validated exam grade. Integrity detection is not implemented.':'Demo results. No real AI grading or drawing interpretation. Integrity detection is not implemented.';$('reviewDialog').showModal();}
+function finish(){pause();stopCamera();state.reviewing=true;renderFactChecks();$('reviewFactChecks').replaceChildren(...Array.from($('factChecks').children,c=>c.cloneNode(true)));$('reviewFactChecks').querySelectorAll('.source-link').forEach((button,i)=>{const refs=(state.factChecks||[]).slice(-8).reverse().flatMap(c=>c.citations);button.onclick=()=>openSource(refs[i]);});$('reviewScore').textContent=state.lastResult?.score==null?'—':`${state.lastResult.score}/100`;$('reviewFeedback').textContent=state.lastResult?.feedback||'No classroom feedback yet. Explain a topic and ask your students a question.';$('reviewConcepts').textContent=state.notes.length;$('reviewRequests').textContent=state.analyses;$('reviewSource').textContent=state.live?'Provisional AI practice feedback, not a validated exam grade. Integrity detection is not implemented.':'Demo results. No real AI grading or drawing interpretation. Integrity detection is not implemented.';$('reviewDialog').showModal();}
 $('endBtn').onclick=finish;$('reviewNav').onclick=finish;
 $('analyzeBtn').onclick=()=>analyze();$('hintBtn').onclick=()=>analyze(true);
 $('transcript').oninput=()=>{state.changedAt=Date.now();resizeTranscript();scheduleAnalysis();};
@@ -152,6 +202,7 @@ $('setupForm').onsubmit=e=>{
   e.preventDefault();const topic=$('topicInput').value.trim();if(!topic)return;
   state.epoch++;state.elapsed=0;state.lastCall=0;state.lastSent='';state.previousBoard=null;state.boardRevision=-1;state.notes=[];state.analyses=0;state.lastResult=null;state.autoBlocked=false;classroomStatus('Waiting for your explanation');$('recentSpeech').textContent='Your spoken words will appear here.';
   state.topic=topic;state.materials=$('materialsInput').value.slice(0,18000);state.duration=Number($('durationInput').value)*60;state.hints=$('hintsInput').checked;
+  state.activeQuestion=null;state.factChecks=[];state.answerHistory=[];state.reviewing=false;document.body.classList.remove('question-answered');$('answerReceipt').hidden=true;$('answerStatus').hidden=true;$('answerFeedback').hidden=true;$('answerEvidence').hidden=true;$('checkAnswer').hidden=true;renderFactChecks();
   setQuestionPending(false);
   board.clear();$('transcript').value='';$('lessonTitle').textContent=topic;$('transcript').placeholder=`How would you explain ${topic.toLowerCase()}?`;
   $('questionText').textContent='Start explaining, and your students will help you find the gaps.';$('questionLabel').textContent='A QUESTION IS A NEW CONNECTION';$('questionInitial').textContent='?';
@@ -161,7 +212,7 @@ $('setupForm').onsubmit=e=>{
 };
 $('upload').onchange=async e=>{
   const files=Array.from(e.target.files);let text=$('materialsInput').value;
-  for(const file of files){if(file.size>100000 || !/\.(txt|md)$/i.test(file.name)){notice('Please choose .txt or .md files smaller than 100 KB.',true);continue;}text+=`\n\n${file.name}\n${await file.text()}`;}
+  for(const file of files){if(file.size>100000 || !/\.(txt|md)$/i.test(file.name)){notice('Please choose .txt or .md files smaller than 100 KB.',true);continue;}text+=`\n\n[Source: ${file.name.replace(/[\r\n\[\]]/g,'')}]\n${await file.text()}`;}
   $('materialsInput').value=text.slice(0,18000);$('uploadStatus').textContent=`${files.length} file(s) selected. Source notes limited to 18,000 characters.`;e.target.value='';
 };
 document.querySelectorAll('[data-close]').forEach(button=>button.onclick=()=>button.closest('dialog').close());
@@ -173,7 +224,8 @@ document.querySelectorAll('[data-color]').forEach(button=>{button.setAttribute('
 $('undo').onclick=()=>board.undo();$('clear').onclick=()=>board.clear();
 $('recencyBtn').onclick=()=>{$('aiPreview').src=board.snapshot(true);$('aiDialog').showModal();};
 function download(){
-  const content=`# ${state.topic}\n\nMode: ${state.mode==='learn'?'Learn IT':'Test IT'}\nSource: ${state.live?'AI classroom':'Scripted demo'}\n\n## Student notes\n\n${state.notes.map(n=>`### ${n.term}\n${n.definition}`).join('\n\n')}\n\n## Latest question\n${state.lastResult?.question||'No question yet.'}\n\n## Feedback\n${state.lastResult?.feedback||'No feedback yet.'}\n\n## Explanation\n${$('transcript').value}\n`;
+  const exportChecks=state.mode==='test'&&!state.hints&&!state.reviewing?[]:(state.factChecks||[]);
+  const content=`# ${state.topic}\n\nMode: ${state.mode==='learn'?'Learn IT':'Test IT'}\nSource: ${state.live?'AI classroom':'Scripted demo'}\n\n## Student notes\n\n${state.notes.map(n=>`### ${n.term}\n${n.definition}`).join('\n\n')}\n\n## Latest question\n${state.activeQuestion?.question||'No question yet.'}\n\n## Feedback\n${state.lastResult?.feedback||'No feedback yet.'}\n\n## Answer status\n${state.activeQuestion?.status||'No question yet'}\n${state.activeQuestion?.feedback||''}\n\n## Answered questions\n${(state.answerHistory||[]).map(q=>q.question+' — '+q.feedback).join('\n')}\n\n## Fact checks (AI assessment against lesson materials)\n${exportChecks.map(c=>c.verdict+': '+c.claim+'\n'+c.explanation+'\n'+c.citations.map(r=>r.sourceName+' lines '+r.lineStart+'–'+r.lineEnd+': '+r.quote).join('\n')).join('\n\n')}\n\n## Explanation\n${$('transcript').value}\n`;
   const url=URL.createObjectURL(new Blob([content],{type:'text/markdown'}));const a=document.createElement('a');a.href=url;a.download='TeachIT-session.md';a.click();setTimeout(()=>URL.revokeObjectURL(url),1000);
 }
 $('download').onclick=download;$('reviewDownload').onclick=download;
@@ -230,3 +282,5 @@ $('retryClassroom').onclick=()=>analyze();
 $('speakQuestion').onclick=()=>{if(!('speechSynthesis'in window)){notice('Speech playback is unavailable in this browser.');return;}speechSynthesis.cancel();speechSynthesis.speak(new SpeechSynthesisUtterance($('questionText').textContent));};
 window.addEventListener('pagehide',()=>{stopCamera();stopMic();});
 try{const response=await fetch('/api/config');if(!response.ok)throw Error();const config=await response.json();state.live=config.live;state.vision=config.vision;$('connection').textContent=config.live?'● AI configured':'● Demo mode';$('notesLabel').textContent=config.live?'LIVE':'DEMO';$('connection').title=config.live?config.model:'No API key configured';if(config.live)$('captureStatus').textContent=config.vision?'Selected board snapshots + explanation on analysis.':'Text-only mode · enable vision after verifying model support.';}catch{notice('Could not connect to the local server. Restart with npm start.',true);}
+
+renderFactChecks();

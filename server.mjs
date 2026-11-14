@@ -41,12 +41,12 @@ const server=http.createServer(async(req,res)=>{
         }
         try{
           const result=await response.json();const output=readCompletion(result);
-          return json(res,200,{...parseResult(output),source:'live',usage:result.usage||null,boardSeen:vision&&Boolean(input.board)});
+          return json(res,200,{...parseResult(output,input),source:'live',usage:result.usage||null,boardSeen:vision&&Boolean(input.board)});
         }catch{return json(res,502,{code:'UPSTREAM_FORMAT',error:'The AI response was incomplete or not in the expected format. Your transcript is saved; retry the analysis.'});}
       } finally {busy=false;}
     }
     if(req.method!=='GET') return json(res,405,{error:'Method not allowed.'});
-    const files={'/':'index.html','/app.js':'app.js','/board.js':'board.js','/microphone.js':'microphone.js','/captions.js':'captions.js','/analysis-trigger.js':'analysis-trigger.js','/style.css':'style.css','/vivid.css':'vivid.css','/assets/cobalt-pattern.png':'assets/cobalt-pattern.png','/assets/connection-border.png':'assets/connection-border.png','/assets/corner-flourish.png':'assets/corner-flourish.png'};
+    const files={'/':'index.html','/app.js':'app.js','/evidence.js':'evidence.js','/questions.js':'questions.js','/board.js':'board.js','/microphone.js':'microphone.js','/captions.js':'captions.js','/analysis-trigger.js':'analysis-trigger.js','/style.css':'style.css','/vivid.css':'vivid.css','/assets/cobalt-pattern.png':'assets/cobalt-pattern.png','/assets/connection-border.png':'assets/connection-border.png','/assets/corner-flourish.png':'assets/corner-flourish.png'};
     const file=files[url.pathname]; if(!file) return json(res,404,{error:'Not found.'});
     const ext=path.extname(file);res.writeHead(200,{'Content-Type':({'.html':'text/html; charset=utf-8','.js':'text/javascript; charset=utf-8','.css':'text/css; charset=utf-8','.png':'image/png'})[ext], 'X-Content-Type-Options':'nosniff','Referrer-Policy':'same-origin','Content-Security-Policy':"default-src 'self'; script-src 'self'; style-src 'self'; img-src 'self' data: blob:; media-src 'self' blob:; connect-src 'self'; object-src 'none'; base-uri 'none'; frame-ancestors 'none'"});res.end(await readFile(path.join(root,file)));
   } catch(error) {json(res,400,{error:error.name==='TimeoutError'?'The model took too long. Try again.':'Could not process the request. Check input size and format.'});}
