@@ -49,11 +49,28 @@ function applyResult(result){
   $('questionInitial').textContent=result.student[0];
   $('questionLabel').textContent=`${result.student.toUpperCase()} HAS A QUESTION${result.source==='demo'?' · SCRIPTED DEMO':''}`;
   $('questionText').textContent=result.question;
+  setQuestionPending(true,result.student);
   document.querySelectorAll('.student-card').forEach(el=>el.classList.toggle('asking',el.dataset.student===result.student));
   if(result.hint)$('tip').textContent=result.hint;else $('tip').textContent=result.feedback;
   $('notesLabel').textContent=result.source==='demo'?'DEMO':'LIVE';
   notice(result.source==='demo'?'Demo classroom: questions follow a sample script; no AI evaluation or drawing interpretation occurred.':`Classroom updated. ${result.boardSeen?'Whiteboard included.':'Text-only analysis; drawings were not interpreted.'}`);
 }
+function setQuestionPending(pending,student=''){
+  document.body.classList.toggle('question-pending',pending);
+  $('questionAlert').hidden=!pending;
+  $('questionAlertText').textContent=pending?`${student} has a question`:'';
+  $('acknowledgeQuestion').hidden=!pending;
+  $('boardCard').classList.remove('question-arrival');
+  if(pending){void $('boardCard').offsetWidth;$('boardCard').classList.add('question-arrival');}
+}
+$('questionAlert').onclick=()=>{
+  const card=$('questionCard');
+  const dock=document.querySelector('.teaching-dock');
+  const top=card.getBoundingClientRect().top+window.scrollY-dock.getBoundingClientRect().height-24;
+  window.scrollTo({top:Math.max(0,top),behavior:window.matchMedia('(prefers-reduced-motion: reduce)').matches?'instant':'smooth'});
+  card.focus({preventScroll:true});
+};
+$('acknowledgeQuestion').onclick=()=>setQuestionPending(false);
 function demoResult(hint){
   const text=$('transcript').value.trim();
   const sample=state.topic.toLowerCase().includes('photosynthesis')&&/chlorophyll/i.test(text);
@@ -135,6 +152,7 @@ $('setupForm').onsubmit=e=>{
   e.preventDefault();const topic=$('topicInput').value.trim();if(!topic)return;
   state.epoch++;state.elapsed=0;state.lastCall=0;state.lastSent='';state.previousBoard=null;state.boardRevision=-1;state.notes=[];state.analyses=0;state.lastResult=null;state.autoBlocked=false;classroomStatus('Waiting for your explanation');$('recentSpeech').textContent='Your spoken words will appear here.';
   state.topic=topic;state.materials=$('materialsInput').value.slice(0,18000);state.duration=Number($('durationInput').value)*60;state.hints=$('hintsInput').checked;
+  setQuestionPending(false);
   board.clear();$('transcript').value='';$('lessonTitle').textContent=topic;$('transcript').placeholder=`How would you explain ${topic.toLowerCase()}?`;
   $('questionText').textContent='Start explaining, and your students will help you find the gaps.';$('questionLabel').textContent='A QUESTION IS A NEW CONNECTION';$('questionInitial').textContent='?';
   document.querySelectorAll('.student-card').forEach(el=>el.classList.remove('asking'));
