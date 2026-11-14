@@ -2,7 +2,7 @@
 export class Board {
   constructor(canvas, changed) {
     this.canvas = canvas; this.ctx = canvas.getContext('2d'); this.changed = changed;
-    this.strokes = []; this.events = []; this.revision = 0; this.color = '#292638'; this.tool = 'pen';
+    this.strokes = []; this.events = []; this.revision = 0; this.color = '#14244B'; this.tool = 'pen';
     canvas.addEventListener('pointerdown', e => this.down(e));
     canvas.addEventListener('pointermove', e => this.move(e));
     canvas.addEventListener('pointerup', () => this.up());
@@ -25,9 +25,9 @@ export class Board {
   undo() { if(this.current || !this.strokes.length) return; const s=this.strokes.pop(); this.events.push({type:'undo', id:s.id, at:Date.now()}); this.revision++; this.changed(); this.render(); }
   clear() { if(!this.strokes.length) return; this.strokes=[]; this.current=null; this.events.push({type:'clear',at:Date.now()}); this.revision++; this.changed(); this.render(); }
   paint(ctx, width, height, recency=false) {
-    ctx.fillStyle = '#fffefa'; ctx.fillRect(0,0,width,height);
+    ctx.fillStyle = '#ffffff'; ctx.fillRect(0,0,width,height);
     for(const s of this.strokes) {
-      ctx.strokeStyle = s.tool==='eraser' ? '#fffefa' : recency ? (Date.now()-s.at < 15000 ? '#6d28d9' : '#292638') : s.color;
+      ctx.strokeStyle = s.tool==='eraser' ? '#ffffff' : recency ? (Date.now()-s.at < 15000 ? '#6d28d9' : '#14244B') : s.color;
       ctx.lineWidth = s.tool==='eraser' ? 24 : 3; ctx.lineCap='round'; ctx.lineJoin='round';
       ctx.beginPath(); const [first,...rest]=s.points; ctx.moveTo(first[0]*width,first[1]*height);
       if(!rest.length) ctx.lineTo(first[0]*width+0.1,first[1]*height+0.1);

@@ -125,10 +125,11 @@ $('upload').onchange=async e=>{
   $('materialsInput').value=text.slice(0,18000);$('uploadStatus').textContent=`${files.length} file(s) selected. Source notes limited to 18,000 characters.`;e.target.value='';
 };
 document.querySelectorAll('[data-close]').forEach(button=>button.onclick=()=>button.closest('dialog').close());
-$('toggleBoard').onclick=()=>{state.boardVisible=!state.boardVisible;$('boardCard').classList.toggle('board-hidden',!state.boardVisible);$('toggleBoard').textContent=state.boardVisible?'Hide board ↗':'Show board ↗';if(state.boardVisible)board.render();};
-$('pen').onclick=()=>{board.tool='pen';$('pen').classList.add('active');$('eraser').classList.remove('active');};
-$('eraser').onclick=()=>{board.tool='eraser';$('eraser').classList.add('active');$('pen').classList.remove('active');};
-document.querySelectorAll('[data-color]').forEach(button=>button.onclick=()=>{board.color=button.dataset.color;$('pen').click();document.querySelectorAll('[data-color]').forEach(b=>b.classList.toggle('active',b===button));});
+$('toggleBoard').onclick=()=>{state.boardVisible=!state.boardVisible;$('boardCard').classList.toggle('board-hidden',!state.boardVisible);$('toggleBoard').textContent=state.boardVisible?'Hide board ↗':'Show board ↗';$('toggleBoard').setAttribute('aria-expanded',String(state.boardVisible));$('boardOff').hidden=state.boardVisible;if(state.boardVisible)board.render();};
+$('toggleNotes').onclick=()=>{const content=$('notebookContent');content.hidden=!content.hidden;const button=$('toggleNotes');button.setAttribute('aria-expanded',String(!content.hidden));button.setAttribute('aria-label',content.hidden?'Expand student notes':'Collapse student notes');button.textContent=content.hidden?'+':'−';button.closest('.notes-card').classList.toggle('notes-collapsed',content.hidden);};
+$('pen').onclick=()=>{board.tool='pen';$('pen').classList.add('active');$('eraser').classList.remove('active');$('pen').setAttribute('aria-pressed','true');$('eraser').setAttribute('aria-pressed','false');};
+$('eraser').onclick=()=>{board.tool='eraser';$('eraser').classList.add('active');$('pen').classList.remove('active');$('eraser').setAttribute('aria-pressed','true');$('pen').setAttribute('aria-pressed','false');};
+document.querySelectorAll('[data-color]').forEach(button=>{button.setAttribute('aria-pressed',String(button.classList.contains('active')));button.onclick=()=>{board.color=button.dataset.color;$('pen').click();document.querySelectorAll('[data-color]').forEach(b=>{b.classList.toggle('active',b===button);b.setAttribute('aria-pressed',String(b===button));});};});
 $('undo').onclick=()=>board.undo();$('clear').onclick=()=>board.clear();
 $('recencyBtn').onclick=()=>{$('aiPreview').src=board.snapshot(true);$('aiDialog').showModal();};
 function download(){
@@ -142,7 +143,7 @@ $('cameraStart').onclick=async()=>{
   try{state.stream=await navigator.mediaDevices.getUserMedia({video:true,audio:false});$('camera').srcObject=state.stream;$('camera').hidden=false;$('cameraPlaceholder').hidden=true;$('cameraStop').hidden=false;notice('Camera preview is local. Video is not recorded or sent to the model.');}catch{notice('Camera access was not granted. You can keep teaching without it.',true);}
 };
 $('cameraStop').onclick=stopCamera;
-function stopMic(){state.micWanted=false;state.recognition?.stop();state.recognition=null;$('micBtn').textContent='♩ Mic off';$('transcriptStatus').textContent='Speak with the mic, or type here';}
+function stopMic(){state.micWanted=false;state.recognition?.stop();state.recognition=null;$('micBtn').textContent='♩ Mic off';$('micBtn').setAttribute('aria-pressed','false');$('transcriptStatus').textContent='Speak with the mic, or type here';}
 $('micBtn').onclick=()=>{
   if(state.micWanted){stopMic();return;}
   const Recognition=window.SpeechRecognition||window.webkitSpeechRecognition;
@@ -151,7 +152,7 @@ $('micBtn').onclick=()=>{
   recognition.onresult=e=>{for(let i=e.resultIndex;i<e.results.length;i++)if(e.results[i].isFinal)$('transcript').value+=`${$('transcript').value?' ':''}${e.results[i][0].transcript}`;scheduleAnalysis();};
   recognition.onerror=e=>{stopMic();notice(`Captions stopped (${e.error}). You can continue by typing.`,true);};
   recognition.onend=()=>{if(state.micWanted){try{recognition.start();}catch{stopMic();}}};
-  try{recognition.start();$('micBtn').textContent='● Mic on';$('transcriptStatus').textContent='Capturing spoken explanation';notice('Browser speech recognition is on. Your browser may use its own cloud speech service.');}catch{stopMic();notice('Could not start speech recognition. Try Chrome or Edge.',true);}
+  try{recognition.start();$('micBtn').textContent='● Mic on';$('micBtn').setAttribute('aria-pressed','true');$('transcriptStatus').textContent='Capturing spoken explanation';notice('Browser speech recognition is on. Your browser may use its own cloud speech service.');}catch{stopMic();notice('Could not start speech recognition. Try Chrome or Edge.',true);}
 };
 $('speakQuestion').onclick=()=>{if(!('speechSynthesis'in window)){notice('Speech playback is unavailable in this browser.');return;}speechSynthesis.cancel();speechSynthesis.speak(new SpeechSynthesisUtterance($('questionText').textContent));};
 window.addEventListener('pagehide',()=>{stopCamera();stopMic();});

@@ -74,3 +74,8 @@ Read [DESIGN.md](DESIGN.md) before UI changes. Cobalt Guava is the selected pale
 
 The latest visual exploration is [design/vivid-cobalt-guava.html](design/vivid-cobalt-guava.html): stronger saturation and larger color areas following the user's reference and correction. Read the feedback section in DESIGN.md before further styling.
 
+
+## Current classroom styling
+
+The running app now uses the vivid Cobalt Studio design in public/vivid.css, with a warm yellow question panel. Generated patterns and accents are in public/assets; the original prompts are in design/asset-prompts.json. Notes can collapse, and hiding the board opens a speaking workspace. Existing OpenRouter configuration and .env are preserved.
+

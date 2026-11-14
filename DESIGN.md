@@ -79,3 +79,8 @@ Calculated text contrast ratios for the original palette (before optional color 
 ## Checks before choosing a layout
 
 Ask a few representative users to start a lesson, teach without a board, open the board, answer a student, find a prior concept, pause and finish. Observe task success, wrong turns and hesitation; ask whether feedback feels supportive. Compare alternatives with the same topic and content. Include keyboard use, zoom, narrow screens and users with different visual/motor needs. No usability study or full accessibility audit has been performed yet.
+
+## Implemented visual milestone
+
+The vivid Cobalt Studio direction is now implemented. The user approved its stronger saturation and requested the app be updated. The question section uses warm yellow (#FFD168) in place of the disputed large pink fill. Cobalt navigation, lavender notes, crisp white drawing space, compact student cards and optional notes/board panels are the current design. Three generated raster assets enhance the lower sidebar, dialog borders and camera-off corner. No decorative image is drawn into the whiteboard or sent to the classroom model. Generation prompts are recorded in design/asset-prompts.json.
+

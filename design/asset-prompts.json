@@ -1,0 +1,17 @@
+[
+  {
+    "key": "cobalt-pattern",
+    "transparent_background": false,
+    "prompt": "Use case: stylized-concept. Asset type: seamless square website sidebar texture for TeachIT, a vibrant mature learning-by-teaching app. Create an abstract screenprinted pattern of connected looping thought paths, soft right-angle routes, open arcs and occasional small circles. Flat saturated cobalt blue background #244FE5. Pattern ink in close tonal blues #4266ED and #173AB5, with a very few tiny warm yellow #FFD168 marks. Professional contemporary graphic design, lively, orderly, tactility of printed ink, high resolution. The texture must stay low contrast within blue so white navigation text can sit over it. Consistent scale, evenly spaced but not mechanical. True repeatable tile composition with matching opposite edges. No words, letters, logos, numbers, school clipart, characters, gradients, shadows, mockup, frames, labels or surrounding presentation. One finished square texture covering the entire image."
+  },
+  {
+    "key": "connection-border",
+    "transparent_background": true,
+    "prompt": "Use case: stylized-concept. Asset type: a single wide horizontal decorative border image for a sophisticated vibrant educational app called TeachIT. A transparent background with actual alpha. Create one continuous abstract ribbon of lively interlocking loops, rounded rectangular connections, short parallel paths and a few small circles, like ideas joining together. Rich cobalt #244FE5 and deep ink #14244B are dominant; restrained bright guava #F65383 and warm yellow #FFD168 punctuation. Flat graphic screenprint aesthetic with barely perceptible ink texture, no gradients or shadows. Wide landscape composition approximately 3:1; pattern concentrated in a shallow band through the lower third, with generous transparent space above; clean open edges so it can sit at the bottom of a sidebar or dialog. Energetic but mature, no childish illustrations, no faces, no stars, no text, letters, numbers, logos, watermark, swatch labels or image presentation board. One standalone finished usable border asset."
+  },
+  {
+    "key": "corner-flourish",
+    "transparent_background": true,
+    "prompt": "Use case: stylized-concept. Asset type: a standalone transparent corner ornament for TeachIT learning application panels. Actual transparent alpha background. A compact abstract screenprinted composition in the lower-right corner: two confident cobalt blue #244FE5 looping curved paths around one warm yellow #FFD168 rounded shape, with a single small vivid guava #F65383 accent and deep navy #14244B fine accent. Suggest the moment ideas connect without depicting a brain or lightbulb. Composition occupies roughly the bottom-right third of a square image, remaining space transparent. Refined contemporary geometric collage, flat color, slightly tactile print texture, lively and welcoming for all ages. No text, letters, logos, faces, clipart, gradients, shadows, mockup, labels or outer border. Output one clean production asset, not a contact sheet."
+  }
+]
