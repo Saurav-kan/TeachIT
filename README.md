@@ -66,3 +66,8 @@ node --test test/*.test.mjs
 ```
 
 The loopback server blocks cross-origin API requests, limits payload sizes, rate-limits live model requests, and keeps API credentials server-side. There is no remote configured until a repository is provided.
+
+## Design direction
+
+Read [DESIGN.md](DESIGN.md) before UI changes. Cobalt Guava is the selected palette; Studio, Seminar and Notebook are layout alternatives for review. The mockup source is [design/cobalt-guava.html](design/cobalt-guava.html). These alternatives have not replaced the running classroom.
+
