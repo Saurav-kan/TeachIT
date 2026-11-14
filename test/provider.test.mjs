@@ -21,3 +21,7 @@ test('read completion content without accepting empty or reasoning-only output',
   assert.equal(readCompletion({choices:[{message:{content:[{type:'text',text:'Hello'}]}}]}),'Hello');
   assert.throws(()=>readCompletion({choices:[{message:{content:null,reasoning:'Internal reasoning'}}]}));
 });
+test('a reasoning model has room to finish its structured response',()=>{
+  const request=buildRequest(input,'meta/muse-spark-1.3-contributor',false);assert.equal(request.reasoning.effort,'low');assert.ok(request.max_tokens>=4096);
+  assert.throws(()=>readCompletion({choices:[{finish_reason:'length',message:{content:'{"question":'}}]}),{code:'OUTPUT_LIMIT'});
+});
