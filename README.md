@@ -71,3 +71,6 @@ The loopback server blocks cross-origin API requests, limits payload sizes, rate
 
 Read [DESIGN.md](DESIGN.md) before UI changes. Cobalt Guava is the selected palette; Studio, Seminar and Notebook are layout alternatives for review. The mockup source is [design/cobalt-guava.html](design/cobalt-guava.html). These alternatives have not replaced the running classroom.
 
+
+The latest visual exploration is [design/vivid-cobalt-guava.html](design/vivid-cobalt-guava.html): stronger saturation and larger color areas following the user's reference and correction. Read the feedback section in DESIGN.md before further styling.
+

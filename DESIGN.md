@@ -8,6 +8,14 @@ TeachIT helps people learn by teaching artificial students. The teacher explains
 
 The user chose **Cobalt Guava**: vibrant, comforting, age-inclusive, and mature. Avoid childish characters, gamified rewards, excessive copy, and a corporate analytics-dashboard feel.
 
+### User correction: preserve the energy
+
+The first mockups were rejected as too mellow and drained of energy. The user supplied a Coco Coders dashboard as a reference for effective color use: a large saturated dark sidebar, a bright logo accent, pale colored grouping surfaces, crisp white content and dark outlines. Treat this as evidence of the user's preference for confident color fields and stronger contrast, not permission to copy the logo or student details.
+
+Do not equate mature design with desaturation, beige backgrounds or tiny accent areas. Use saturated navigation and active-student surfaces while keeping the drawing area clear. Short copy, clean geometry and disciplined hierarchy supply maturity. The previous 70/20/10 color suggestion is not a constraint.
+
+The new **Cobalt studio**, **Guava seminar** and **Electric notebook** alternatives propose richer cobalt `#244FE5`, vivid guava `#F65383`, warm yellow `#FFD168`, deep ink `#14244B`, crisp white `#FFFFFF` and cool supporting backgrounds. These specific revised tokens are proposals pending review; the preference for stronger vibrancy is explicit. The original palette below remains the historical starting point.
+
 Palette:
 
 - Ink/navigation: `#21324A`.
@@ -18,7 +26,7 @@ Palette:
 - Additional light board surface: `#FFFDFA`.
 - Supporting readable text: `#586479`.
 
-Use cobalt for the current action, selected tools and the active mode. Use guava sparingly for the current student/question and sand for supporting note surfaces. Guava and sand need dark ink text; do not put white body text on them. These are design choices, not universal psychological meanings. The earlier 70/20/10 color split was a heuristic, not a measured requirement.
+Use cobalt for navigation, the current action, selected tools and the active mode. Give guava enough area to make the active student/question visually expressive. Use dark ink on guava and yellow. Keep drawing surfaces white and quiet; concentrate the strongest color in the surrounding interface. These are design choices, not universal psychological meanings.
 
 ## Research translated into product decisions
 
