@@ -6,6 +6,20 @@ import { sourceDocuments, normalizeEvidence } from './evidence.js';
 import { advanceQuestion, answerSinceQuestion } from './questions.js';
 
 const $=id=>document.getElementById(id);
+let followLatestNotes=true,noteTick=0;
+const noteSnapshots=new Map(),noteOrder=new Map();
+function referenceTab(name,focus=false){
+  for(const key of ['notes','checks','transcript']){const selected=key===name;const tab=$(`${key}Tab`);tab.setAttribute('aria-selected',String(selected));tab.tabIndex=selected?0:-1;$(`${key}Panel`).hidden=!selected;}
+  if(focus)$(`${name}Tab`).focus();
+  if(name==='transcript')resizeTranscript();
+}
+for(const [i,key] of ['notes','checks','transcript'].entries()){
+  $(`${key}Tab`).onclick=()=>referenceTab(key);
+  $(`${key}Tab`).onkeydown=e=>{let next;if(e.key==='ArrowRight')next=(i+1)%3;else if(e.key==='ArrowLeft')next=(i+2)%3;else if(e.key==='Home')next=0;else if(e.key==='End')next=2;else return;e.preventDefault();referenceTab(['notes','checks','transcript'][next],true);};
+}
+function followNotes(value){followLatestNotes=value;$('followNotes').setAttribute('aria-pressed',String(value));$('followNotes').textContent=value?'Following':'↑ Latest';}
+$('followNotes').onclick=()=>{followNotes(true);renderNotes();$('notebookContent').scrollTop=0;};
+$('notebookContent').onscroll=()=>{followNotes($('notebookContent').scrollTop<20);};
 const questionOpen=()=>state.activeQuestion&&state.activeQuestion.status!=='answered';
 const state={mode:'learn',running:false,elapsed:0,startTime:0,duration:600,hints:false,topic:'How photosynthesis works',materials:'',notes:[],analyses:0,lastResult:null,live:false,vision:false,busy:false,epoch:0,lastCall:0,lastSent:'',previousBoard:null,boardRevision:-1,changedAt:0,autoTimer:null,stream:null,recognition:null,micWanted:false,boardVisible:true};
 const microphone=new Microphone({onState:renderMicrophoneState,onLevel:renderMicrophoneLevel});
@@ -25,7 +39,8 @@ function scheduleAnalysis(){
   if(signature()===state.lastSent)return;
   classroomStatus('New explanation queued');analysisTrigger.request();
 }
-function classroomStatus(text,error=false){$('classroomHealth').textContent=text;$('classroomHealth').classList.toggle('pipeline-error',error);$('retryClassroom').hidden=!error;}
+function statusIndicator(){const error=Boolean(document.querySelector('.pipeline-health .pipeline-error'));$('statusDetails').classList.toggle('has-error',error);if(error)$('statusDetails').open=true;}
+function classroomStatus(text,error=false){$('classroomHealth').textContent=text;$('classroomHealth').classList.toggle('pipeline-error',error);$('retryClassroom').hidden=!error;statusIndicator();}
 function resizeTranscript(){const input=$('transcript');const follow=input.scrollHeight-input.scrollTop-input.clientHeight<40;input.style.height='auto';input.style.height=Math.min(260,Math.max(88,input.scrollHeight))+'px';if(follow&&document.activeElement!==input)input.scrollTop=input.scrollHeight;}
 function receiveCaptionText({final,interim,provisional}){
   if(final){const input=$('transcript');input.value+=(input.value&&!/\s$/.test(input.value)?' ':'')+final;state.changedAt=Date.now();resizeTranscript();scheduleAnalysis();}
@@ -38,12 +53,23 @@ function renderCaptionState(status,reason){
   if($('captionHealth').textContent!==(labels[status]||status))$('captionHealth').textContent=labels[status]||status;$('captionHealth').classList.toggle('pipeline-error',status==='error');$('retryCaptions').hidden=status!=='error';
   $('transcriptStatus').textContent=status==='listening'?'Capturing spoken explanation':status==='reconnecting'?'Speech service reconnecting · text preserved':status==='error'?'Captions stopped · retry at the top':'Mic muted · type or enable microphone';
   if(status==='error')notice('Speech-to-text stopped while the microphone meter may still be active. Retry captions at the top; your existing explanation is preserved.',true);
+  statusIndicator();
 }
 function renderNotes(){
   const container=$('notes');
+  const notebook=$('notebookContent'),scrollTop=notebook.scrollTop;
+  const oldNotes=[...container.querySelectorAll('.note')];
+  const previousOrder=new Map(oldNotes.map((node,i)=>[node.dataset.term,i]));
+  const anchor=oldNotes.find(node=>node.getBoundingClientRect().bottom>notebook.getBoundingClientRect().top);
+  const anchorTop=anchor?.getBoundingClientRect().top;
+  const changed=new Set();
+  for(const note of state.notes){const key=note.term.toLowerCase();if(noteSnapshots.get(key)!==note.definition){changed.add(key);noteSnapshots.set(key,note.definition);noteOrder.set(key,++noteTick);}}
+  const notes=[...state.notes].sort((a,b)=>followLatestNotes?(noteOrder.get(b.term.toLowerCase())||0)-(noteOrder.get(a.term.toLowerCase())||0):(previousOrder.get(a.term.toLowerCase())??Infinity)-(previousOrder.get(b.term.toLowerCase())??Infinity));
   if(!state.notes.length){container.replaceChildren();const p=document.createElement('p');p.className='form-caption';p.textContent='Your ideas will land here. One explanation at a time.';container.append(p);}
-  else{container.replaceChildren(...state.notes.map(n=>{const div=document.createElement('div');div.className='note';const title=document.createElement('h4');title.textContent=n.term;const p=document.createElement('p');p.textContent=n.definition;div.append(title,p);return div;}));}
-  $('noteCount').textContent=`${state.notes.length} concept${state.notes.length===1?'':'s'} captured`;
+  else{container.replaceChildren(...notes.map(n=>{const div=document.createElement('div');div.dataset.term=n.term.toLowerCase();div.className=changed.has(div.dataset.term)&&(noteOrder.get(div.dataset.term)||0)>noteTick-3?'note just-updated':'note';const title=document.createElement('h4');title.textContent=n.term;const p=document.createElement('p');p.textContent=n.definition;div.append(title,p);return div;}));}
+  notebook.scrollTop=followLatestNotes?0:scrollTop;
+  if(!followLatestNotes&&anchor){const replacement=[...container.querySelectorAll('.note')].find(node=>node.dataset.term===anchor.dataset.term);if(replacement)notebook.scrollTop+=replacement.getBoundingClientRect().top-anchorTop;}
+  $('noteCount').textContent=`${state.notes.length} concept${state.notes.length===1?'':'s'}`;
 }
 function applyResult(result,sentTranscript){
   state.lastResult=result;state.analyses++;
@@ -93,6 +119,7 @@ function setQuestionPending(pending,student='',arrival=true){
 }
 $('questionAlert').onclick=()=>{
   const card=$('questionCard');
+  if(window.matchMedia('(min-width: 701px)').matches){card.scrollTop=0;card.focus({preventScroll:true});return;}
   const dock=document.querySelector('.teaching-dock');
   const top=card.getBoundingClientRect().top+window.scrollY-dock.getBoundingClientRect().height-24;
   window.scrollTo({top:Math.max(0,top),behavior:window.matchMedia('(prefers-reduced-motion: reduce)').matches?'instant':'smooth'});
@@ -104,6 +131,7 @@ function orderedFactChecks(){const rank={contradicted:0,unverified:1,corrected:2
 function renderFactChecks(){
   const container=$('factChecks');container.replaceChildren();
   const withheld=state.mode==='test'&&!state.hints&&!state.reviewing;
+  const count=withheld?0:(state.factChecks||[]).filter(c=>c.verdict==='contradicted').length;$('checksCount').hidden=!count;$('checksCount').textContent=count;
   $('factCheckSummary').textContent=withheld?'Available after your test':!state.live?'Live source checks require an AI connection':!state.factChecks?.length?'No claims checked yet':'AI checks against your materials';
   if(withheld)return;
   for(const check of orderedFactChecks()){
@@ -147,7 +175,7 @@ async function analyze(hint=false,automatic=false){
   const sentSignature=signature();const sentTranscript=transcript;const revision=board.revision;
   const includeBoard=state.vision&&state.boardVisible&&(board.strokes.length>0||state.previousBoard);
   const image=includeBoard?board.snapshot():undefined;
-  $('analyzeBtn').disabled=true;$('hintBtn').disabled=true;$('analyzeBtn').textContent='Students are thinking…';
+  $('analyzeBtn').disabled=true;$('hintBtn').disabled=true;$('analyzeBtn').textContent='Thinking…';
   try{
     let result;
     if(state.live){
@@ -162,7 +190,7 @@ async function analyze(hint=false,automatic=false){
     $('boardState').textContent=result.boardSeen?'Shared with the classroom':'Saved locally';
     $('captureStatus').textContent=state.live?`Analysis ${state.analyses} · ${result.boardSeen?'board + explanation':'explanation only'}`:`Demo analysis ${state.analyses} · no API charges`;
   }catch(error){if(epoch===state.epoch){state.autoBlocked=true;const message=error.name==='TimeoutError'?'The AI classroom timed out. Retry analysis.':error.message;classroomStatus(message,true);notice(message,true);}}
-  finally{state.busy=false;$('analyzeBtn').disabled=false;$('analyzeBtn').textContent='Ask the classroom ↗';$('hintBtn').disabled=state.mode==='test'&&!state.hints;scheduleAnalysis();}
+  finally{state.busy=false;$('analyzeBtn').disabled=false;$('analyzeBtn').textContent='Ask students';$('hintBtn').disabled=state.mode==='test'&&!state.hints;scheduleAnalysis();}
 }
 function elapsed(){return state.elapsed+(state.running?(Date.now()-state.startTime)/1000:0);}
 function renderClock(){
@@ -172,7 +200,7 @@ function renderClock(){
 }
 function updateRunning(){
   document.body.classList.toggle('running',state.running);
-  $('startBtn').textContent=state.running?'Ⅱ Pause teaching':state.elapsed>0?'▶ Resume teaching':'▶ Start teaching';
+  $('startBtn').textContent=state.running?'Ⅱ Pause':state.elapsed>0?'▶ Resume':'▶ Start';
   $('startBtn').setAttribute('aria-pressed',String(state.running));
   $('audienceStatus').textContent=state.running?(microphone.status==='live'?'Listening':'Reading your explanation'):'Ready to listen';
   $('learnMode').disabled=state.running||state.elapsed>0;$('testMode').disabled=state.running||state.elapsed>0;
@@ -205,6 +233,7 @@ $('setupForm').onsubmit=e=>{
   e.preventDefault();const topic=$('topicInput').value.trim();if(!topic)return;
   state.epoch++;state.elapsed=0;state.lastCall=0;state.lastSent='';state.previousBoard=null;state.boardRevision=-1;state.notes=[];state.analyses=0;state.lastResult=null;state.autoBlocked=false;classroomStatus('Waiting for your explanation');$('recentSpeech').textContent='Your spoken words will appear here.';
   state.topic=topic;state.materials=$('materialsInput').value.slice(0,18000);state.duration=Number($('durationInput').value)*60;state.hints=$('hintsInput').checked;
+  noteSnapshots.clear();noteOrder.clear();followNotes(true);referenceTab('notes');
   state.activeQuestion=null;state.factChecks=[];state.answerHistory=[];state.reviewing=false;document.body.classList.remove('question-answered');$('answerReceipt').hidden=true;$('answerStatus').hidden=true;$('answerFeedback').hidden=true;$('answerEvidence').hidden=true;$('checkAnswer').hidden=true;renderFactChecks();
   setQuestionPending(false);
   board.clear();$('transcript').value='';$('lessonTitle').textContent=topic;$('transcript').placeholder=`How would you explain ${topic.toLowerCase()}?`;
@@ -247,7 +276,7 @@ function renderMicrophoneState(status,error){
   button.dataset.state=status;button.setAttribute('aria-pressed',String(live));
   button.setAttribute('aria-busy',String(pending));
   button.setAttribute('aria-label',pending?'Cancel microphone request':live||interrupted?'Mute microphone':'Enable microphone');
-  $('micStatus').textContent=live?'Microphone active':pending?'Allow microphone access':interrupted?'Microphone interrupted':status==='error'?'Microphone unavailable':'Microphone muted';
+  $('micStatus').textContent=live?'Mic on':pending?'Allow mic':interrupted?'Interrupted':status==='error'?'Unavailable':'Muted';
   $('micLevelText').textContent=live?'Speak to check your level':pending?'Use your browser’s permission prompt':interrupted?'Audio input is temporarily suspended':status==='error'?'Click the mic to try again':'Click the mic or start teaching';
   if(status==='muted'||status==='error'){state.micWanted=false;stopCaptions();$('transcriptStatus').textContent='Mic muted · type or enable microphone';}
   if(interrupted){stopCaptions();$('transcriptStatus').textContent='Audio interrupted · captions paused';}

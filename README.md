@@ -101,3 +101,7 @@ Continuous speech no longer resets the analysis deadline. After enough finalized
 
 On this Windows system, OpenRouter initially failed with UNABLE_TO_VERIFY_LEAF_SIGNATURE. The startup scripts now use --use-system-ca, enabling the trusted system certificate store while keeping certificate verification on. No keys or certificate-validation bypasses are committed. A short real OpenRouter request returned a student question and four notes after this change. Use Start-TeachIT.cmd or the updated Node command above.
 
+
+## Compact teaching workspace
+
+Desktop uses a slim control strip above a viewport-sized board and reference panel. Notes, fact checks and the editable transcript have separate keyboard-accessible tabs. Notes scroll independently, with recent updates first; following pauses when scrolling back, and Latest resumes it. Updated notes receive a restrained highlight. Connection diagnostics are under Status and open automatically on a speech/AI error. The optional camera preview sits over the board. Small screens stack the workspace while keeping the notes panel bounded.

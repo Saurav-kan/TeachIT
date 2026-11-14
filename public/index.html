@@ -1,6 +1,6 @@
 <!doctype html>
 <html lang="en">
-<head><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1"><meta name="theme-color" content="#244FE5"><title>TeachIT — Learn it. Teach it. Know it.</title><link rel="stylesheet" href="/vivid.css"><script type="module" src="/app.js"></script></head>
+<head><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1"><meta name="theme-color" content="#244FE5"><title>TeachIT — Learn it. Teach it. Know it.</title><link rel="stylesheet" href="/vivid.css"><link rel="stylesheet" href="/workspace.css"><script type="module" src="/app.js"></script></head>
 <body>
 <aside class="sidebar">
   <a class="brand" href="/" aria-label="TeachIT home">Teach<span>IT</span><b></b></a>
@@ -13,9 +13,9 @@
 <div class="main-shell">
   <header class="topbar"><div><span class="mobile-brand">Teach<span>IT</span></span><span class="desktop-breadcrumb">Classroom <span class="slash">/</span><span class="breadcrumb">Live session</span></span></div><div class="top-actions"><span class="status-pill" id="connection">● Demo mode</span><button class="icon-button" id="settingsBtn" aria-label="Session settings">⚙</button></div></header>
   <main>
-    <div class="page-heading"><div><div class="eyebrow">YOUR CLASSROOM</div><h1>Let’s connect the dots<span>.</span></h1></div><button class="button secondary" id="newLesson">＋ New lesson</button></div>
+    <section class="session-bar" aria-label="Lesson controls"><div class="lesson-info"><span class="lesson-icon">↗</span><div><h2 id="lessonTitle">How photosynthesis works</h2></div></div><div class="mode-switch" aria-label="Learning mode"><button id="learnMode" class="active" aria-pressed="true">Learn IT</button><button id="testMode" aria-pressed="false">Test IT</button></div><div class="session-clock"><span class="clock-dot"></span><span id="clock">00:00</span><small id="clockLabel">Self-paced</small></div><button class="text-button" id="newLesson" title="New lesson">＋ New</button></section>
     <section class="session-controls teaching-dock" aria-label="Teaching and microphone controls">
-      <button class="button primary" id="startBtn" aria-pressed="false">▶ Start teaching</button>
+      <button class="button primary" id="startBtn" aria-pressed="false">▶ Start</button>
       <div class="microphone-control">
         <button class="mic-toggle is-muted" id="micBtn" aria-label="Enable microphone" aria-pressed="false" aria-describedby="micStatus micLevelText">
           <svg class="microphone-symbol" viewBox="0 0 48 64" fill="none" aria-hidden="true">
@@ -35,21 +35,23 @@
           </svg>
           <span class="mic-state-dot" aria-hidden="true"></span>
         </button>
-        <div class="mic-readout"><strong id="micStatus" role="status" aria-live="polite">Microphone muted</strong><span id="micLevelText">Click the mic or start teaching</span><span class="mic-meter-legend"><i class="level-good"></i>Good <i class="level-warm"></i>High <i class="level-hot"></i>Too loud</span></div>
+        <div class="mic-readout"><strong id="micStatus" role="status" aria-live="polite">Muted</strong><span id="micLevelText">Click the mic or start teaching</span><span class="mic-meter-legend"><i class="level-good"></i>Good <i class="level-warm"></i>High <i class="level-hot"></i>Too loud</span></div>
       </div>
-      <div class="dock-actions"><button class="button secondary" id="analyzeBtn">Ask the classroom ↗</button><div><button class="text-button" id="hintBtn">✧ Need a hint?</button><button class="text-button end-session" id="endBtn">Finish →</button></div></div>
-      <div class="pipeline-health" aria-label="Lesson processing status">
+      <div class="dock-actions"><button class="button secondary" id="analyzeBtn">Ask students</button><div><button class="text-button" id="hintBtn">Hint</button><button class="text-button end-session" id="endBtn">Finish</button></div></div>
+        <button class="question-alert" id="questionAlert" hidden aria-controls="questionCard"><span id="questionAlertIcon" aria-hidden="true">!</span><strong id="questionAlertText"></strong><span aria-hidden="true">View →</span></button>
+<details class="dock-status" id="statusDetails"><summary title="Speech and AI connection status">Status <span id="statusDot" aria-hidden="true"></span></summary>      <div class="pipeline-health" aria-label="Lesson processing status">
         <div><span>Speech to text</span><strong id="captionHealth" role="status">Muted</strong><button class="text-button" id="retryCaptions" hidden>Retry captions</button></div>
         <div><span>AI classroom</span><strong id="classroomHealth" role="status">Waiting for your explanation</strong><button class="text-button" id="retryClassroom" hidden>Retry analysis</button></div>
         <p id="recentSpeech">Your spoken words will appear here.</p>
-        <button class="question-alert" id="questionAlert" hidden aria-controls="questionCard"><span id="questionAlertIcon" aria-hidden="true">!</span><strong id="questionAlertText"></strong><span aria-hidden="true">View →</span></button>
+
       </div>
+</details>
     </section>
-    <section class="session-bar" aria-label="Lesson controls"><div class="lesson-info"><span class="lesson-icon">↗</span><div><span class="tiny-label">TODAY’S LESSON</span><h2 id="lessonTitle">How photosynthesis works</h2></div></div><div class="mode-switch" aria-label="Learning mode"><button id="learnMode" class="active" aria-pressed="true">Learn IT</button><button id="testMode" aria-pressed="false">Test IT</button></div><div class="session-clock"><span class="clock-dot"></span><span id="clock">00:00</span><small id="clockLabel">Self-paced</small></div></section>
+
     <div class="classroom-grid">
       <section class="teaching-column">
         <div class="board-card" id="boardCard"><div class="card-header"><div class="card-label"><span>✎</span> Your whiteboard <span class="subtle-label">OPTIONAL</span></div><button class="text-button" id="toggleBoard" aria-expanded="true">Hide board ↗</button></div>
-          <div class="board-wrap" id="boardWrap"><canvas id="whiteboard" aria-label="Drawing whiteboard. Use a pointer to draw; alternatively explain your diagram in the transcript."></canvas><div class="board-empty" id="boardEmpty"><span class="sketch-mark" aria-hidden="true"><b>Idea</b><i>→</i><b>Connection</b></span><h3>A space for your thinking.</h3><p>Sketch it. Explain it. Make it click.</p></div><div class="board-badge">✦ <span id="boardState">Ready when you are</span></div></div>
+          <div class="board-wrap" id="boardWrap">        <section class="teacher-card"><div class="camera-placeholder" id="cameraPlaceholder"><button class="text-button" id="cameraStart" aria-label="Enable camera" title="Enable camera">▣ Camera</button></div><video id="camera" autoplay muted playsinline hidden></video><span class="you-label">You <span>THE TEACHER</span></span><button class="camera-stop icon-button" id="cameraStop" hidden aria-label="Turn camera off">×</button></section><canvas id="whiteboard" aria-label="Drawing whiteboard. Use a pointer to draw; alternatively explain your diagram in the transcript."></canvas><div class="board-empty" id="boardEmpty"><span class="sketch-mark" aria-hidden="true"><b>Idea</b><i>→</i><b>Connection</b></span><h3>A space for your thinking.</h3><p>Sketch it. Explain it. Make it click.</p></div><div class="board-badge">✦ <span id="boardState">Ready when you are</span></div></div>
           <div class="board-toolbar"><div class="tool-group"><button class="tool active" id="pen" aria-pressed="true" aria-label="Pen" title="Pen">✎</button><button class="tool" id="eraser" aria-pressed="false" aria-label="Eraser" title="Eraser">▱</button><span class="tool-divider"></span><button class="swatch ink active" data-color="#14244B" aria-label="Navy ink"></button><button class="swatch cobalt" data-color="#244FE5" aria-label="Cobalt ink"></button><button class="swatch guava" data-color="#D2275A" aria-label="Guava ink"></button></div><div class="tool-group"><button class="tool" id="undo" aria-label="Undo last stroke" title="Undo">↶</button><button class="tool" id="clear" aria-label="Clear whiteboard" title="Clear board">⌫</button><button class="text-button" id="recencyBtn" aria-pressed="false" title="Show an AI-only view in a preview dialog">AI view</button></div></div>
         </div>
         <div class="board-off" id="boardOff" hidden><span aria-hidden="true">⌁</span><div><h3>The floor is yours.</h3><p>Keep explaining. Your students are listening.</p></div></div>
@@ -59,13 +61,20 @@
         <div class="students"><article class="student-card" data-student="Maya"><span class="student-avatar maya">M</span><div class="student-name">Maya<span>Asks “why?”</span></div></article><article class="student-card" data-student="Leo"><span class="student-avatar leo">L</span><div class="student-name">Leo<span>Connects ideas</span></div></article><article class="student-card" data-student="Sam"><span class="student-avatar sam">S</span><div class="student-name">Sam<span>Finds examples</span></div></article></div>
 
       </section>
-      <aside class="notes-column"><section class="notes-card"><div class="card-header"><div class="card-label">▤ Student notes</div><div class="notes-header-actions"><span class="live-label" id="notesLabel">DEMO</span><button class="icon-button" id="toggleNotes" aria-label="Collapse student notes" aria-expanded="true">−</button></div></div><div class="notebook" id="notebookContent"><div class="tiny-label">IN YOUR WORDS</div><h3 class="notebook-heading">What I’m learning</h3><div id="notes"><div class="notes-empty"><span aria-hidden="true">↗</span><p>Your ideas, captured<br>as you explain.</p></div></div></div><div class="notes-footer"><span id="noteCount">0 concepts captured</span><button class="text-button" id="download">↓ Save notes</button></div></section>
-        <section class="teacher-card"><div class="camera-placeholder" id="cameraPlaceholder"><span>◎</span><p>Your teacher’s seat</p><button class="text-button" id="cameraStart">Enable camera</button></div><video id="camera" autoplay muted playsinline hidden></video><span class="you-label">You <span>THE TEACHER</span></span><button class="camera-stop icon-button" id="cameraStop" hidden aria-label="Turn camera off">×</button></section>
-        <section class="fact-check-panel" aria-label="Fact checks"><div class="card-label">↗ Fact check <span class="subtle-label">AI</span></div><p id="factCheckSummary">No claims checked yet</p><div id="factChecks"></div></section>
+      <aside class="notes-column" aria-label="Teaching reference panel">
+<div class="inspector-tabs" role="tablist" aria-label="Reference panel">
+<button role="tab" id="notesTab" aria-controls="notesPanel" aria-selected="true" tabindex="0">Notes</button>
+<button role="tab" id="checksTab" aria-controls="checksPanel" aria-selected="false" tabindex="-1">Fact checks <span id="checksCount" hidden></span></button>
+<button role="tab" id="transcriptTab" aria-controls="transcriptPanel" aria-selected="false" tabindex="-1">Transcript</button>
+</div><div class="inspector-panel" id="notesPanel" role="tabpanel" aria-labelledby="notesTab"><section class="notes-card"><div class="card-header"><div class="card-label">▤ Student notes</div><div class="notes-header-actions"><span class="live-label" id="notesLabel">DEMO</span><button class="icon-button" id="toggleNotes" aria-label="Collapse student notes" aria-expanded="true">−</button></div></div><div class="notebook" id="notebookContent" tabindex="0" aria-label="Student notes, newest updates first"><div id="notes"><div class="notes-empty"><span aria-hidden="true">↗</span><p>Your notes appear here as you teach.</p></div></div></div><div class="notes-footer"><span id="noteCount">0 concepts</span><button class="text-button" id="followNotes" aria-pressed="true" title="Follow the latest note updates">Following</button><button class="text-button" id="download">↓ Save notes</button></div></section>
+
+
+</div><div class="inspector-panel" id="checksPanel" role="tabpanel" aria-labelledby="checksTab" hidden>        <section class="fact-check-panel" aria-label="Fact checks"><div class="card-label">↗ Fact check <span class="subtle-label">AI</span></div><p id="factCheckSummary">No claims checked yet</p><div id="factChecks"></div></section></div>
+<div class="inspector-panel" id="transcriptPanel" role="tabpanel" aria-labelledby="transcriptTab" hidden>    <section class="transcript-panel"><div class="transcript-label"><label for="transcript">Your explanation</label><span id="transcriptStatus">Speak with the mic, or type here</span></div><textarea id="transcript" rows="4" placeholder="Start with what you know. Why do plants need sunlight?"></textarea><p class="live-caption" id="liveCaption" hidden></p><div class="transcript-actions"><span id="captureStatus">Board changes stay local until analysis.</span><button class="text-button" id="sampleBtn">Try a sample explanation ↗</button></div></section></div>
         <div class="gentle-tip"><span>✦</span><p id="tip">Try explaining it like your students are hearing it for the first time.</p></div>
       </aside>
     </div>
-    <section class="transcript-panel"><div class="transcript-label"><label for="transcript">Your explanation</label><span id="transcriptStatus">Speak with the mic, or type here</span></div><textarea id="transcript" rows="4" placeholder="Start with what you know. Why do plants need sunlight?"></textarea><p class="live-caption" id="liveCaption" hidden></p><div class="transcript-actions"><span id="captureStatus">Board changes stay local until analysis.</span><button class="text-button" id="sampleBtn">Try a sample explanation ↗</button></div></section>
+
     <div class="notice" id="notice" role="status" aria-live="polite"></div>
   </main>
 </div>
