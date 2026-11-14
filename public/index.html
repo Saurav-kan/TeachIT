@@ -14,6 +14,31 @@
   <header class="topbar"><div><span class="mobile-brand">Teach<span>IT</span></span><span class="desktop-breadcrumb">Classroom <span class="slash">/</span><span class="breadcrumb">Live session</span></span></div><div class="top-actions"><span class="status-pill" id="connection">● Demo mode</span><button class="icon-button" id="settingsBtn" aria-label="Session settings">⚙</button></div></header>
   <main>
     <div class="page-heading"><div><div class="eyebrow">YOUR CLASSROOM</div><h1>Let’s connect the dots<span>.</span></h1></div><button class="button secondary" id="newLesson">＋ New lesson</button></div>
+    <section class="session-controls teaching-dock" aria-label="Teaching and microphone controls">
+      <button class="button primary" id="startBtn" aria-pressed="false">▶ Start teaching</button>
+      <div class="microphone-control">
+        <button class="mic-toggle is-muted" id="micBtn" aria-label="Enable microphone" aria-pressed="false" aria-describedby="micStatus micLevelText">
+          <svg class="microphone-symbol" viewBox="0 0 48 64" fill="none" aria-hidden="true">
+            <rect class="mic-capsule" x="12" y="4" width="24" height="38" rx="12"/>
+            <g class="mic-level-bars">
+              <rect class="mic-led" data-step="8" x="17" y="10" width="14" height="3" rx="1"/>
+              <rect class="mic-led" data-step="7" x="17" y="14" width="14" height="3" rx="1"/>
+              <rect class="mic-led" data-step="6" x="17" y="18" width="14" height="3" rx="1"/>
+              <rect class="mic-led" data-step="5" x="17" y="22" width="14" height="3" rx="1"/>
+              <rect class="mic-led" data-step="4" x="17" y="26" width="14" height="3" rx="1"/>
+              <rect class="mic-led" data-step="3" x="17" y="30" width="14" height="3" rx="1"/>
+              <rect class="mic-led" data-step="2" x="17" y="34" width="14" height="3" rx="1"/>
+              <rect class="mic-led" data-step="1" x="17" y="38" width="14" height="3" rx="1"/>
+            </g>
+            <path class="mic-stand" d="M6 29v5a18 18 0 0 0 36 0v-5M24 52v8M16 60h16"/>
+            <path class="mic-slash" d="M4 7 44 51"/>
+          </svg>
+          <span class="mic-state-dot" aria-hidden="true"></span>
+        </button>
+        <div class="mic-readout"><strong id="micStatus" role="status" aria-live="polite">Microphone muted</strong><span id="micLevelText">Click the mic or start teaching</span><span class="mic-meter-legend"><i class="level-good"></i>Good <i class="level-warm"></i>High <i class="level-hot"></i>Too loud</span></div>
+      </div>
+      <div class="dock-actions"><button class="button secondary" id="analyzeBtn">Ask the classroom ↗</button><div><button class="text-button" id="hintBtn">✧ Need a hint?</button><button class="text-button end-session" id="endBtn">Finish →</button></div></div>
+    </section>
     <section class="session-bar" aria-label="Lesson controls"><div class="lesson-info"><span class="lesson-icon">↗</span><div><span class="tiny-label">TODAY’S LESSON</span><h2 id="lessonTitle">How photosynthesis works</h2></div></div><div class="mode-switch" aria-label="Learning mode"><button id="learnMode" class="active" aria-pressed="true">Learn IT</button><button id="testMode" aria-pressed="false">Test IT</button></div><div class="session-clock"><span class="clock-dot"></span><span id="clock">00:00</span><small id="clockLabel">Self-paced</small></div></section>
     <div class="classroom-grid">
       <section class="teaching-column">
@@ -33,7 +58,6 @@
       </aside>
     </div>
     <section class="transcript-panel"><div class="transcript-label"><label for="transcript">Your explanation</label><span id="transcriptStatus">Speak with the mic, or type here</span></div><textarea id="transcript" rows="2" placeholder="Start with what you know. Why do plants need sunlight?"></textarea><div class="transcript-actions"><span id="captureStatus">Board changes stay local until analysis.</span><button class="text-button" id="sampleBtn">Try a sample explanation ↗</button></div></section>
-    <footer class="session-controls"><div class="control-left"><button class="button secondary" id="micBtn" aria-pressed="false">♩ Mic off</button><button class="text-button" id="hintBtn">✧ Need a hint?</button></div><div class="control-center"><button class="button primary" id="startBtn">▶ Start teaching</button><button class="button secondary" id="analyzeBtn">Ask the classroom ↗</button></div><button class="text-button end-session" id="endBtn">Finish session →</button></footer>
     <div class="notice" id="notice" role="status" aria-live="polite"></div>
   </main>
 </div>

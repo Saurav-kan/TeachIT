@@ -16,3 +16,42 @@ dialog{border:1px solid var(--accent);border-radius:15px;background:white;paddin
 @media(max-width:450px){h1{font-size:24px;max-width:220px}.eyebrow{font-size:9px}.page-heading .button{font-size:10px;min-height:38px;padding:8px}.classroom-grid{gap:18px}.notes-column{grid-template-columns:1fr;gap:14px}.notes-card{min-height:0;grid-row:auto}.notebook{padding:20px}.notebook-heading{margin-bottom:20px}.notes-empty{padding:0}.notes-empty>span{display:none}.notes-empty p{margin:0 0 10px}.teacher-card{height:145px}.camera-placeholder::after{background-size:190px}.gentle-tip{padding:0 4px}.board-wrap{height:290px}.sketch-mark{gap:10px}.sketch-mark b{font-size:12px;padding:13px 15px}.board-empty h3{font-size:19px}.board-toolbar{padding:7px 9px;gap:6px}.tool-group{gap:4px}.tool{width:29px}.swatch{width:22px;height:22px}.tool-divider{margin:0 1px}.question-card{padding:16px 13px;gap:10px}.question-card p{font-size:14px}.question-label{font-size:9px}.question-avatar{width:30px;height:30px;font-size:13px}.student-card{flex-direction:column;align-items:start;padding:11px;gap:6px;min-height:93px}.student-card.asking{padding:10px}.student-name{font-size:12px}.student-name>span{display:none}.student-avatar{width:28px;height:28px}.listening{font-size:10px}.transcript-label>span{max-width:135px;text-align:right}.transcript-actions{align-items:start;gap:8px}.transcript-actions>span{max-width:135px}.transcript-actions>button{font-size:10px}.session-clock small{display:none}.settings-row{gap:14px}.settings-row .check-label{max-width:150px}.review-stats{gap:28px}dialog{padding:23px 21px 62px}dialog h2{font-size:24px}}
 @media(pointer:coarse){.button,.text-button,.tool,.icon-button,.mode-switch button{min-height:44px}.tool,.icon-button{min-width:36px}.swatch{width:29px;height:29px}.tool-group{gap:4px}input,textarea,select{font-size:16px!important}.board-toolbar{flex-wrap:wrap}}
 @media(prefers-reduced-motion:reduce){*{transition:none!important;scroll-behavior:auto!important}}
+
+/* Core teaching actions stay visible while the classroom scrolls. */
+.teaching-dock{position:sticky;top:10px;z-index:20;display:grid;grid-template-columns:auto minmax(220px,1fr) auto;align-items:center;gap:18px;margin:0 0 19px;padding:12px 15px;background:var(--surface);border:1px solid var(--accent);border-radius:12px;box-shadow:0 5px 16px #14244B0D}
+.teaching-dock>#startBtn{min-height:48px;min-width:150px;font-size:13px}
+.microphone-control{display:flex;align-items:center;gap:13px;min-width:0}
+.mic-toggle{position:relative;display:grid;place-items:center;width:66px;height:76px;flex-shrink:0;padding:7px 9px;border:1px solid #C9CFDE;border-radius:12px;background:#F0F2F8;color:#5C657C}
+.microphone-symbol{width:43px;height:58px;display:block;overflow:visible}
+.mic-capsule{fill:#E0E5EF;stroke:currentColor;stroke-width:2.4}
+.mic-stand{stroke:currentColor;stroke-width:2.5;stroke-linecap:round;stroke-linejoin:round}
+.mic-slash{stroke:#AF2842;stroke-width:3.4;stroke-linecap:round}
+.mic-led{fill:#687A96;opacity:.18}
+.is-muted .mic-level-bars{opacity:0}
+.mic-state-dot{position:absolute;bottom:6px;right:6px;width:8px;height:8px;background:#9A3247;border:2px solid white;border-radius:50%}
+.mic-toggle.is-live{background:#EAF9F1;border:2px solid #18774B;padding:6px 8px;color:#146441}
+.is-live .mic-capsule{fill:#14244B;stroke:#146441}
+.is-live .mic-slash{display:none}
+.is-live .mic-state-dot{background:#18774B}
+.is-live .mic-led.lit{fill:#50EB97;opacity:1}
+.is-live .mic-led.lit[data-step="7"]{fill:#FFC75F}
+.is-live .mic-led.lit[data-step="8"]{fill:#FF657B}
+.mic-toggle.is-live[data-quality="high"]{border-color:#9B6500;background:#FFF6DF;color:#855300}
+.mic-toggle.is-live[data-quality="clipping"]{border-color:#BD263E;background:#FFF0F1;color:#A71F35}
+.mic-toggle[data-quality="clipping"] .mic-state-dot{background:#BD263E}
+.mic-toggle.is-pending{border:2px dashed var(--accent);color:var(--accent);background:var(--soft)}
+.mic-toggle.is-error{border-color:#AF2842;background:#FFF0F1}
+.mic-readout{display:flex;flex-direction:column;gap:3px;min-width:0}
+.mic-readout strong{font-size:12px;font-weight:650;line-height:1.4;color:var(--ink)}
+.mic-readout>span:not(.mic-meter-legend){font-size:11px;line-height:1.5;color:var(--muted)}
+.mic-meter-legend{display:flex;align-items:center;flex-wrap:wrap;gap:4px;font-size:9px;color:var(--muted);margin-top:3px}
+.mic-meter-legend i{display:inline-block;width:6px;height:6px;border-radius:2px;margin-left:5px}
+.mic-meter-legend i:first-child{margin-left:0}.level-good{background:#18774B}.level-warm{background:#AD7100}.level-hot{background:#BD263E}
+.dock-actions{display:flex;flex-direction:column;gap:5px;align-items:stretch}
+.dock-actions>.button{min-height:38px;font-size:11px}
+.dock-actions>div{display:flex;justify-content:space-between;gap:13px}
+.dock-actions .text-button{font-size:10px;min-height:28px}.dock-actions .end-session{margin:0}
+@media(max-width:1100px){.teaching-dock{grid-template-columns:auto minmax(210px,1fr) auto;gap:12px;padding:12px}.teaching-dock>#startBtn{min-width:130px;font-size:12px;padding:11px}.microphone-control{gap:10px}.mic-readout strong{font-size:11px}.mic-readout>span:not(.mic-meter-legend){font-size:10px}.dock-actions>.button{font-size:10px;padding:9px}.dock-actions>div{gap:9px}}
+@media(max-width:850px){.teaching-dock{grid-template-columns:auto minmax(220px,1fr)}.dock-actions{grid-column:1/-1;flex-direction:row;align-items:center;justify-content:space-between;gap:15px}.dock-actions>div{gap:20px}.dock-actions>.button{font-size:11px}.dock-actions .text-button{font-size:11px}.mic-readout strong{font-size:12px}.mic-readout>span:not(.mic-meter-legend){font-size:11px}.teaching-dock>#startBtn{min-width:160px}}
+@media(max-width:540px){.teaching-dock{top:5px;grid-template-columns:minmax(0,1fr) 66px;column-gap:12px;row-gap:7px;padding:12px;margin-bottom:16px}.microphone-control{display:contents}.teaching-dock>#startBtn{grid-column:1;grid-row:1;justify-self:start;min-width:0;font-size:12px;min-height:41px;padding:10px 14px}.mic-toggle{grid-column:2;grid-row:1/3;align-self:center}.mic-readout{grid-column:1;grid-row:2;gap:1px}.mic-readout strong{font-size:11px}.mic-readout>span:not(.mic-meter-legend){font-size:10px}.mic-meter-legend{font-size:9px;margin-top:2px}.dock-actions{grid-column:1/-1;grid-row:3;gap:7px;padding-top:7px;border-top:1px solid #E0E5F1;margin-top:2px;flex-wrap:wrap}.dock-actions>.button{font-size:10px;min-height:32px;padding:8px 10px}.dock-actions>div{gap:10px}.dock-actions .text-button{font-size:10px;min-height:30px}}
+@media(pointer:coarse){.teaching-dock .button,.teaching-dock .text-button{min-height:44px}.teaching-dock .mic-toggle{min-width:66px;min-height:76px}}

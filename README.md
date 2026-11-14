@@ -79,3 +79,10 @@ The latest visual exploration is [design/vivid-cobalt-guava.html](design/vivid-c
 
 The running app now uses the vivid Cobalt Studio design in public/vivid.css, with a warm yellow question panel. Generated patterns and accents are in public/assets; the original prompts are in design/asset-prompts.json. Notes can collapse, and hiding the board opens a speaking workspace. Existing OpenRouter configuration and .env are preserved.
 
+
+## Microphone controls
+
+The teaching controls are above the lesson and stay pinned while scrolling. Start teaching requests microphone input; pause, finish and page exit release it. The icon shows a slashed microphone when muted and signal-driven bars when active. Green indicates detected input, amber a high digital level and red peaks near clipping. This is a digital amplitude guide, not a calibrated sound-pressure meter. The Web Audio analyser stays local and is never connected to speakers. Browser speech captions are a separate service; failures there are reported independently from the actual input state. In browsers without captions, the meter can remain live while the user types the explanation.
+
+The meter was verified in a browser using a generated test signal, without capturing the user's device. Automated checks cover signal levels, permission denial, canceled requests, device disconnects, track/context cleanup and browser callback binding. Real device access still depends on browser permission and hardware.
+

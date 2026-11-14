@@ -1,7 +1,9 @@
 import { Board } from './board.js';
+import { Microphone } from './microphone.js';
 
 const $=id=>document.getElementById(id);
 const state={mode:'learn',running:false,elapsed:0,startTime:0,duration:600,hints:false,topic:'How photosynthesis works',materials:'',notes:[],analyses:0,lastResult:null,live:false,vision:false,busy:false,epoch:0,lastCall:0,lastSent:'',previousBoard:null,boardRevision:-1,changedAt:0,autoTimer:null,stream:null,recognition:null,micWanted:false,boardVisible:true};
+const microphone=new Microphone({onState:renderMicrophoneState,onLevel:renderMicrophoneLevel});
 const board=new Board($('whiteboard'),()=>{
   $('boardEmpty').hidden=board.strokes.length>0;
   $('boardState').textContent='Changes saved locally';
@@ -84,15 +86,17 @@ function renderClock(){
 function updateRunning(){
   document.body.classList.toggle('running',state.running);
   $('startBtn').textContent=state.running?'Ⅱ Pause teaching':state.elapsed>0?'▶ Resume teaching':'▶ Start teaching';
-  $('audienceStatus').textContent=state.running?'Listening':'Ready to listen';
+  $('startBtn').setAttribute('aria-pressed',String(state.running));
+  $('audienceStatus').textContent=state.running?(microphone.status==='live'?'Listening':'Reading your explanation'):'Ready to listen';
   $('learnMode').disabled=state.running||state.elapsed>0;$('testMode').disabled=state.running||state.elapsed>0;
 }
 function pause(){if(state.running){state.elapsed=elapsed();state.running=false;}clearTimeout(state.autoTimer);stopMic();updateRunning();renderClock();}
-$('startBtn').onclick=()=>{
+$('startBtn').onclick=async()=>{
   if(state.running){pause();return;}
   if(state.mode==='test'&&state.elapsed>=state.duration){notice('This timed session has ended. Start a new lesson to try again.');return;}
   state.running=true;state.startTime=Date.now();updateRunning();scheduleAnalysis();
   notice(state.live?'Classroom started. Explain your topic, then pause to let your students respond.':'Demo classroom started. Try the sample explanation to see the intended flow.');
+  if(microphone.status!=='live')await enableMic();
 };
 setInterval(renderClock,1000);
 function setMode(mode){if(state.running||state.elapsed>0)return;state.mode=mode;$('learnMode').classList.toggle('active',mode==='learn');$('testMode').classList.toggle('active',mode==='test');$('learnMode').setAttribute('aria-pressed',mode==='learn');$('testMode').setAttribute('aria-pressed',mode==='test');$('clockLabel').textContent=mode==='learn'?'Self-paced':'Time remaining';$('hintBtn').disabled=mode==='test'&&!state.hints;renderClock();}
@@ -143,17 +147,63 @@ $('cameraStart').onclick=async()=>{
   try{state.stream=await navigator.mediaDevices.getUserMedia({video:true,audio:false});$('camera').srcObject=state.stream;$('camera').hidden=false;$('cameraPlaceholder').hidden=true;$('cameraStop').hidden=false;notice('Camera preview is local. Video is not recorded or sent to the model.');}catch{notice('Camera access was not granted. You can keep teaching without it.',true);}
 };
 $('cameraStop').onclick=stopCamera;
-function stopMic(){state.micWanted=false;state.recognition?.stop();state.recognition=null;$('micBtn').textContent='♩ Mic off';$('micBtn').setAttribute('aria-pressed','false');$('transcriptStatus').textContent='Speak with the mic, or type here';}
-$('micBtn').onclick=()=>{
-  if(state.micWanted){stopMic();return;}
+function stopCaptions(){
+  clearTimeout(state.captionRestart);state.captionRestart=null;
+  const recognition=state.recognition;state.recognition=null;
+  if(recognition){recognition.onend=null;recognition.onerror=null;recognition.onresult=null;try{recognition.abort();}catch{}}
+}
+function renderMicrophoneState(status,error){
+  const live=status==='live',pending=status==='requesting',interrupted=status==='interrupted';
+  const button=$('micBtn');
+  button.classList.toggle('is-live',live);button.classList.toggle('is-muted',!live);
+  button.classList.toggle('is-pending',pending);button.classList.toggle('is-error',status==='error');
+  button.dataset.state=status;button.setAttribute('aria-pressed',String(live));
+  button.setAttribute('aria-busy',String(pending));
+  button.setAttribute('aria-label',pending?'Cancel microphone request':live||interrupted?'Mute microphone':'Enable microphone');
+  $('micStatus').textContent=live?'Microphone active':pending?'Allow microphone access':interrupted?'Microphone interrupted':status==='error'?'Microphone unavailable':'Microphone muted';
+  $('micLevelText').textContent=live?'Speak to check your level':pending?'Use your browser’s permission prompt':interrupted?'Audio input is temporarily suspended':status==='error'?'Click the mic to try again':'Click the mic or start teaching';
+  if(status==='muted'||status==='error'){state.micWanted=false;stopCaptions();$('transcriptStatus').textContent='Mic muted · type or enable microphone';}
+  if(interrupted){stopCaptions();$('transcriptStatus').textContent='Audio interrupted · captions paused';}
+  if(live&&state.micWanted)startCaptions();
+  if(error){
+    const denied=['NotAllowedError','PermissionDeniedError'].includes(error.name);
+    notice(denied?'Microphone access was not granted. Allow it in your browser, or keep teaching by typing.':error.message||'Could not open the microphone. Check your input device and try again.',true);
+  }
+  if(state.running)$('audienceStatus').textContent=live?'Listening':'Reading your explanation';
+}
+function renderMicrophoneLevel(level){
+  const live=microphone.status==='live';
+  for(const led of $('micBtn').querySelectorAll('.mic-led'))led.classList.toggle('lit',live&&Number(led.dataset.step)<=level.bars);
+  $('micBtn').dataset.quality=live?level.quality:'quiet';
+  if(live){
+    $('micLevelText').textContent=({quiet:'Listening · waiting for your voice',good:'Good input level',high:'High input · move back a little',clipping:'Too loud · lower gain or move back'})[level.quality];
+  }
+}
+function stopMic(){state.micWanted=false;stopCaptions();microphone.stop();}
+async function enableMic(){
+  if(microphone.status==='requesting'&&state.micStartPromise)return state.micStartPromise;
+  if(!navigator.mediaDevices?.getUserMedia||!(window.AudioContext||window.webkitAudioContext)){
+    renderMicrophoneState('error',new Error('Live microphone input is unavailable here. Open TeachIT in Chrome or Edge, or type your explanation.'));return false;
+  }
+  state.micWanted=true;const pending=microphone.start();state.micStartPromise=pending;
+  try{return await pending;}finally{if(state.micStartPromise===pending)state.micStartPromise=null;}
+}
+function startCaptions(){
+  if(state.recognition||!state.micWanted||microphone.status!=='live')return;
   const Recognition=window.SpeechRecognition||window.webkitSpeechRecognition;
-  if(!Recognition){notice('Live captions are unavailable in this browser. Type your explanation, or use Chrome/Edge.',true);return;}
-  const recognition=new Recognition();recognition.continuous=true;recognition.interimResults=false;recognition.lang='en-US';state.recognition=recognition;state.micWanted=true;
-  recognition.onresult=e=>{for(let i=e.resultIndex;i<e.results.length;i++)if(e.results[i].isFinal)$('transcript').value+=`${$('transcript').value?' ':''}${e.results[i][0].transcript}`;scheduleAnalysis();};
-  recognition.onerror=e=>{stopMic();notice(`Captions stopped (${e.error}). You can continue by typing.`,true);};
-  recognition.onend=()=>{if(state.micWanted){try{recognition.start();}catch{stopMic();}}};
-  try{recognition.start();$('micBtn').textContent='● Mic on';$('micBtn').setAttribute('aria-pressed','true');$('transcriptStatus').textContent='Capturing spoken explanation';notice('Browser speech recognition is on. Your browser may use its own cloud speech service.');}catch{stopMic();notice('Could not start speech recognition. Try Chrome or Edge.',true);}
-};
+  if(!Recognition){$('transcriptStatus').textContent='Captions unavailable · type here';notice('The microphone meter is live. Speech captions are unavailable in this browser; type your explanation or use Chrome/Edge.',true);return;}
+  const recognition=new Recognition();recognition.continuous=true;recognition.interimResults=false;recognition.lang='en-US';state.recognition=recognition;
+  recognition.onstart=()=>{if(state.recognition===recognition)$('transcriptStatus').textContent='Capturing spoken explanation';};
+  recognition.onresult=e=>{if(state.recognition!==recognition)return;for(let i=e.resultIndex;i<e.results.length;i++)if(e.results[i].isFinal)$('transcript').value+=`${$('transcript').value?' ':''}${e.results[i][0].transcript}`;scheduleAnalysis();};
+  recognition.onerror=e=>{
+    if(state.recognition!==recognition||e.error==='no-speech')return;
+    stopCaptions();$('transcriptStatus').textContent='Captions unavailable · type here';
+    notice(`Speech captions stopped (${e.error}). The mic level meter is still active; type your explanation or mute the mic.`,true);
+  };
+  recognition.onend=()=>{if(state.recognition===recognition&&state.micWanted&&microphone.status==='live'){state.captionRestart=setTimeout(()=>{if(state.recognition===recognition&&state.micWanted&&microphone.status==='live'){try{recognition.start();}catch{stopCaptions();$('transcriptStatus').textContent='Captions unavailable · type here';}}},250);}};
+  try{recognition.start();$('transcriptStatus').textContent='Starting speech captions…';notice('Microphone active. The input meter runs locally; browser speech recognition may use a cloud speech service.');}catch{stopCaptions();$('transcriptStatus').textContent='Captions unavailable · type here';notice('The microphone meter is live, but speech captions could not start. You can type your explanation.',true);}
+}
+$('micBtn').onclick=()=>{if(state.micWanted||microphone.status==='requesting'){stopMic();return;}enableMic();};
 $('speakQuestion').onclick=()=>{if(!('speechSynthesis'in window)){notice('Speech playback is unavailable in this browser.');return;}speechSynthesis.cancel();speechSynthesis.speak(new SpeechSynthesisUtterance($('questionText').textContent));};
 window.addEventListener('pagehide',()=>{stopCamera();stopMic();});
 try{const response=await fetch('/api/config');if(!response.ok)throw Error();const config=await response.json();state.live=config.live;state.vision=config.vision;$('connection').textContent=config.live?'● AI connected':'● Demo mode';$('connection').title=config.live?config.model:'No API key configured';if(config.live)$('captureStatus').textContent=config.vision?'Selected board snapshots + explanation on analysis.':'Text-only mode · enable vision after verifying model support.';}catch{notice('Could not connect to the local server. Restart with npm start.',true);}

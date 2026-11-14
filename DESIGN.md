@@ -84,3 +84,8 @@ Ask a few representative users to start a lesson, teach without a board, open th
 
 The vivid Cobalt Studio direction is now implemented. The user approved its stronger saturation and requested the app be updated. The question section uses warm yellow (#FFD168) in place of the disputed large pink fill. Cobalt navigation, lavender notes, crisp white drawing space, compact student cards and optional notes/board panels are the current design. Three generated raster assets enhance the lower sidebar, dialog borders and camera-off corner. No decorative image is drawn into the whiteboard or sent to the classroom model. Generation prompts are recorded in design/asset-prompts.json.
 
+
+## Essential teaching controls
+
+The user requires start/pause and microphone state to be visible without scrolling. A sticky control dock now appears before the lesson settings and whiteboard. Use microphone/muted-microphone iconography, actual signal bars inside the capsule, a persistent active/muted status, and green/amber/red input guidance. Color alone must never indicate whether capture is active. Do not replace this signal-driven meter with decorative animation. Canceling a permission request, pausing and finishing must not leave a live input track behind.
+
