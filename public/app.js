@@ -1,9 +1,13 @@
 import { Board } from './board.js';
 import { Microphone } from './microphone.js';
+import { Captions } from './captions.js';
+import { AnalysisTrigger } from './analysis-trigger.js';
 
 const $=id=>document.getElementById(id);
 const state={mode:'learn',running:false,elapsed:0,startTime:0,duration:600,hints:false,topic:'How photosynthesis works',materials:'',notes:[],analyses:0,lastResult:null,live:false,vision:false,busy:false,epoch:0,lastCall:0,lastSent:'',previousBoard:null,boardRevision:-1,changedAt:0,autoTimer:null,stream:null,recognition:null,micWanted:false,boardVisible:true};
 const microphone=new Microphone({onState:renderMicrophoneState,onLevel:renderMicrophoneLevel});
+const captions=new Captions({createRecognition:()=>{const Recognition=window.SpeechRecognition||window.webkitSpeechRecognition;if(!Recognition)throw Error('Unavailable');return new Recognition();},onText:receiveCaptionText,onState:renderCaptionState});
+const analysisTrigger=new AnalysisTrigger({ready:()=>state.running&&!state.busy&&!state.autoBlocked&&!board.current&&$('transcript').value.trim().split(/\s+/).length>=12&&signature()!==state.lastSent,run:()=>analyze(false,true),delay:()=>Math.max(1500,20000-(Date.now()-state.lastCall))});
 const board=new Board($('whiteboard'),()=>{
   $('boardEmpty').hidden=board.strokes.length>0;
   $('boardState').textContent='Changes saved locally';
@@ -12,13 +16,25 @@ const board=new Board($('whiteboard'),()=>{
 function notice(text,error=false){$('notice').textContent=text;$('notice').classList.toggle('error',error);}
 function signature(){return `${$('transcript').value.trim()}|${state.boardVisible?board.revision:'hidden'}`;}
 function scheduleAnalysis(){
-  clearTimeout(state.autoTimer);
-  if(!state.running)return;
-  const delay=Math.max(2000,20000-(Date.now()-state.lastCall));
-  state.autoTimer=setTimeout(()=>{
-    if(!state.running || state.busy || board.current)return;
-    if(signature()!==state.lastSent && $('transcript').value.trim().split(/\s+/).length>=12) analyze(false,true);
-  },delay);
+  if(!state.running||state.busy||state.autoBlocked)return;
+  const words=$('transcript').value.trim().split(/\s+/).filter(Boolean).length;
+  if(words<12){classroomStatus(`Waiting for explanation · ${words}/12 words`);return;}
+  if(signature()===state.lastSent)return;
+  classroomStatus('New explanation queued');analysisTrigger.request();
+}
+function classroomStatus(text,error=false){$('classroomHealth').textContent=text;$('classroomHealth').classList.toggle('pipeline-error',error);$('retryClassroom').hidden=!error;}
+function resizeTranscript(){const input=$('transcript');const follow=input.scrollHeight-input.scrollTop-input.clientHeight<40;input.style.height='auto';input.style.height=Math.min(260,Math.max(88,input.scrollHeight))+'px';if(follow&&document.activeElement!==input)input.scrollTop=input.scrollHeight;}
+function receiveCaptionText({final,interim,provisional}){
+  if(final){const input=$('transcript');input.value+=(input.value&&!/\s$/.test(input.value)?' ':'')+final;state.changedAt=Date.now();resizeTranscript();scheduleAnalysis();}
+  $('liveCaption').hidden=!interim&&!provisional;
+  $('liveCaption').textContent=interim?`Hearing: ${interim}`:provisional?'Last phrase preserved from a draft—check its wording.':'';
+  const latest=interim||final||'';if(latest)$('recentSpeech').textContent=`Heard: ${latest.length>160?'…'+latest.slice(-160):latest}`;
+}
+function renderCaptionState(status,reason){
+  const labels={muted:'Muted',starting:'Starting…',listening:'Listening',reconnecting:'Reconnecting…',error:`Stopped · ${reason||'unavailable'}`};
+  if($('captionHealth').textContent!==(labels[status]||status))$('captionHealth').textContent=labels[status]||status;$('captionHealth').classList.toggle('pipeline-error',status==='error');$('retryCaptions').hidden=status!=='error';
+  $('transcriptStatus').textContent=status==='listening'?'Capturing spoken explanation':status==='reconnecting'?'Speech service reconnecting · text preserved':status==='error'?'Captions stopped · retry at the top':'Mic muted · type or enable microphone';
+  if(status==='error')notice('Speech-to-text stopped while the microphone meter may still be active. Retry captions at the top; your existing explanation is preserved.',true);
 }
 function renderNotes(){
   const container=$('notes');
@@ -55,9 +71,9 @@ async function analyze(hint=false,automatic=false){
   if(state.busy)return;
   if(state.mode==='test'&&hint&&!state.hints)return;
   const transcript=$('transcript').value.trim();
-  if(transcript.length<20){if(!automatic)notice('Add a few sentences first so your students have something to ask about.');return;}
+  if(transcript.length<20){if(!automatic){classroomStatus('Add a few sentences first');notice('Add a few sentences first so your students have something to ask about.');}return;}
   if(state.live && Date.now()-state.lastCall<20000){if(!automatic)notice('Let’s give the next explanation a little room. Please wait 20 seconds between analyses.');scheduleAnalysis();return;}
-  const epoch=state.epoch;state.busy=true;state.lastCall=Date.now();
+  const epoch=state.epoch;state.autoBlocked=false;state.busy=true;state.lastCall=Date.now();analysisTrigger.cancel();classroomStatus('Reading your explanation…');
   const sentSignature=signature();const revision=board.revision;
   const includeBoard=state.vision&&state.boardVisible&&(board.strokes.length>0||state.previousBoard);
   const image=includeBoard?board.snapshot():undefined;
@@ -65,16 +81,17 @@ async function analyze(hint=false,automatic=false){
   try{
     let result;
     if(state.live){
-      const response=await fetch('/api/analyze',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({topic:state.topic,materials:state.materials,transcript:transcript.slice(-20000),mode:state.mode,hints:state.mode==='learn'||state.hints,requestHint:hint,notes:state.notes.slice(-20),question:state.lastResult?.question,events:state.boardVisible?board.events.slice(-100):[],board:image,previousBoard:includeBoard&&revision!==state.boardRevision?state.previousBoard:undefined,recencyBoard:includeBoard&&$('recencyInput').checked?board.snapshot(true):undefined})});
+      const response=await fetch('/api/analyze',{method:'POST',headers:{'Content-Type':'application/json'},signal:AbortSignal.timeout(65000),body:JSON.stringify({topic:state.topic,materials:state.materials,transcript:transcript.slice(-20000),mode:state.mode,hints:state.mode==='learn'||state.hints,requestHint:hint,notes:state.notes.slice(-20),question:state.lastResult?.question,events:state.boardVisible?board.events.slice(-100):[],board:image,previousBoard:includeBoard&&revision!==state.boardRevision?state.previousBoard:undefined,recencyBoard:includeBoard&&$('recencyInput').checked?board.snapshot(true):undefined})});
       result=await response.json();if(!response.ok)throw Error(result.error||'Classroom analysis failed.');
     }else result=demoResult(hint);
     if(epoch!==state.epoch)return;
     if(state.mode==='test'&&!state.hints)result.hint=null;
     applyResult(result);state.lastSent=sentSignature;state.boardRevision=revision;
+    classroomStatus(`Updated · ${state.notes.length} concepts · ${state.analyses} ${state.analyses===1?'analysis':'analyses'}`);if(state.live)$('connection').textContent='● AI connected';
     if(image)state.previousBoard=image;
     $('boardState').textContent=result.boardSeen?'Shared with the classroom':'Saved locally';
     $('captureStatus').textContent=state.live?`Analysis ${state.analyses} · ${result.boardSeen?'board + explanation':'explanation only'}`:`Demo analysis ${state.analyses} · no API charges`;
-  }catch(error){notice(error.message,true);}
+  }catch(error){if(epoch===state.epoch){state.autoBlocked=true;const message=error.name==='TimeoutError'?'The AI classroom timed out. Retry analysis.':error.message;classroomStatus(message,true);notice(message,true);}}
   finally{state.busy=false;$('analyzeBtn').disabled=false;$('analyzeBtn').textContent='Ask the classroom ↗';$('hintBtn').disabled=state.mode==='test'&&!state.hints;scheduleAnalysis();}
 }
 function elapsed(){return state.elapsed+(state.running?(Date.now()-state.startTime)/1000:0);}
@@ -90,7 +107,7 @@ function updateRunning(){
   $('audienceStatus').textContent=state.running?(microphone.status==='live'?'Listening':'Reading your explanation'):'Ready to listen';
   $('learnMode').disabled=state.running||state.elapsed>0;$('testMode').disabled=state.running||state.elapsed>0;
 }
-function pause(){if(state.running){state.elapsed=elapsed();state.running=false;}clearTimeout(state.autoTimer);stopMic();updateRunning();renderClock();}
+function pause(){if(state.running){state.elapsed=elapsed();state.running=false;}analysisTrigger.cancel();stopMic();updateRunning();renderClock();}
 $('startBtn').onclick=async()=>{
   if(state.running){pause();return;}
   if(state.mode==='test'&&state.elapsed>=state.duration){notice('This timed session has ended. Start a new lesson to try again.');return;}
@@ -104,10 +121,11 @@ $('learnMode').onclick=()=>setMode('learn');$('testMode').onclick=()=>setMode('t
 function finish(){pause();stopCamera();$('reviewScore').textContent=state.lastResult?.score==null?'—':`${state.lastResult.score}/100`;$('reviewFeedback').textContent=state.lastResult?.feedback||'No classroom feedback yet. Explain a topic and ask your students a question.';$('reviewConcepts').textContent=state.notes.length;$('reviewRequests').textContent=state.analyses;$('reviewSource').textContent=state.live?'Provisional AI practice feedback, not a validated exam grade. Integrity detection is not implemented.':'Demo results. No real AI grading or drawing interpretation. Integrity detection is not implemented.';$('reviewDialog').showModal();}
 $('endBtn').onclick=finish;$('reviewNav').onclick=finish;
 $('analyzeBtn').onclick=()=>analyze();$('hintBtn').onclick=()=>analyze(true);
-$('transcript').oninput=()=>{state.changedAt=Date.now();scheduleAnalysis();};
+$('transcript').oninput=()=>{state.changedAt=Date.now();resizeTranscript();scheduleAnalysis();};
 $('sampleBtn').onclick=()=>{
   if(state.topic!=='How photosynthesis works'){notice('Start a new lesson with the default photosynthesis topic to try the sample.');return;}
   $('transcript').value='Plants use sunlight to turn water and carbon dioxide into glucose. This process is called photosynthesis. Chlorophyll absorbs light energy in the chloroplasts. The glucose stores chemical energy that the plant can use to grow. Oxygen is released as a byproduct.';
+  resizeTranscript();
   analyze();
 };
 function openSetup(){if(state.busy){notice('Wait for the classroom to finish thinking before changing your lesson.');return;}pause();$('topicInput').value=state.topic;$('materialsInput').value=state.materials;$('durationInput').value=state.duration/60;$('hintsInput').checked=state.hints;$('setupDialog').showModal();}
@@ -115,7 +133,7 @@ $('newLesson').onclick=openSetup;$('settingsBtn').onclick=openSetup;$('materials
 $('classroomNav').onclick=()=>window.scrollTo({top:0,behavior:'smooth'});
 $('setupForm').onsubmit=e=>{
   e.preventDefault();const topic=$('topicInput').value.trim();if(!topic)return;
-  state.epoch++;state.elapsed=0;state.lastCall=0;state.lastSent='';state.previousBoard=null;state.boardRevision=-1;state.notes=[];state.analyses=0;state.lastResult=null;
+  state.epoch++;state.elapsed=0;state.lastCall=0;state.lastSent='';state.previousBoard=null;state.boardRevision=-1;state.notes=[];state.analyses=0;state.lastResult=null;state.autoBlocked=false;classroomStatus('Waiting for your explanation');$('recentSpeech').textContent='Your spoken words will appear here.';
   state.topic=topic;state.materials=$('materialsInput').value.slice(0,18000);state.duration=Number($('durationInput').value)*60;state.hints=$('hintsInput').checked;
   board.clear();$('transcript').value='';$('lessonTitle').textContent=topic;$('transcript').placeholder=`How would you explain ${topic.toLowerCase()}?`;
   $('questionText').textContent='Start explaining, and your students will help you find the gaps.';$('questionLabel').textContent='A QUESTION IS A NEW CONNECTION';$('questionInitial').textContent='?';
@@ -147,11 +165,7 @@ $('cameraStart').onclick=async()=>{
   try{state.stream=await navigator.mediaDevices.getUserMedia({video:true,audio:false});$('camera').srcObject=state.stream;$('camera').hidden=false;$('cameraPlaceholder').hidden=true;$('cameraStop').hidden=false;notice('Camera preview is local. Video is not recorded or sent to the model.');}catch{notice('Camera access was not granted. You can keep teaching without it.',true);}
 };
 $('cameraStop').onclick=stopCamera;
-function stopCaptions(){
-  clearTimeout(state.captionRestart);state.captionRestart=null;
-  const recognition=state.recognition;state.recognition=null;
-  if(recognition){recognition.onend=null;recognition.onerror=null;recognition.onresult=null;try{recognition.abort();}catch{}}
-}
+function stopCaptions(){captions.stop();}
 function renderMicrophoneState(status,error){
   const live=status==='live',pending=status==='requesting',interrupted=status==='interrupted';
   const button=$('micBtn');
@@ -176,6 +190,7 @@ function renderMicrophoneLevel(level){
   for(const led of $('micBtn').querySelectorAll('.mic-led'))led.classList.toggle('lit',live&&Number(led.dataset.step)<=level.bars);
   $('micBtn').dataset.quality=live?level.quality:'quiet';
   if(live){
+    if(level.quality!=='quiet')captions.voice();
     $('micLevelText').textContent=({quiet:'Listening · waiting for your voice',good:'Good input level',high:'High input · move back a little',clipping:'Too loud · lower gain or move back'})[level.quality];
   }
 }
@@ -189,21 +204,11 @@ async function enableMic(){
   try{return await pending;}finally{if(state.micStartPromise===pending)state.micStartPromise=null;}
 }
 function startCaptions(){
-  if(state.recognition||!state.micWanted||microphone.status!=='live')return;
-  const Recognition=window.SpeechRecognition||window.webkitSpeechRecognition;
-  if(!Recognition){$('transcriptStatus').textContent='Captions unavailable · type here';notice('The microphone meter is live. Speech captions are unavailable in this browser; type your explanation or use Chrome/Edge.',true);return;}
-  const recognition=new Recognition();recognition.continuous=true;recognition.interimResults=false;recognition.lang='en-US';state.recognition=recognition;
-  recognition.onstart=()=>{if(state.recognition===recognition)$('transcriptStatus').textContent='Capturing spoken explanation';};
-  recognition.onresult=e=>{if(state.recognition!==recognition)return;for(let i=e.resultIndex;i<e.results.length;i++)if(e.results[i].isFinal)$('transcript').value+=`${$('transcript').value?' ':''}${e.results[i][0].transcript}`;scheduleAnalysis();};
-  recognition.onerror=e=>{
-    if(state.recognition!==recognition||e.error==='no-speech')return;
-    stopCaptions();$('transcriptStatus').textContent='Captions unavailable · type here';
-    notice(`Speech captions stopped (${e.error}). The mic level meter is still active; type your explanation or mute the mic.`,true);
-  };
-  recognition.onend=()=>{if(state.recognition===recognition&&state.micWanted&&microphone.status==='live'){state.captionRestart=setTimeout(()=>{if(state.recognition===recognition&&state.micWanted&&microphone.status==='live'){try{recognition.start();}catch{stopCaptions();$('transcriptStatus').textContent='Captions unavailable · type here';}}},250);}};
-  try{recognition.start();$('transcriptStatus').textContent='Starting speech captions…';notice('Microphone active. The input meter runs locally; browser speech recognition may use a cloud speech service.');}catch{stopCaptions();$('transcriptStatus').textContent='Captions unavailable · type here';notice('The microphone meter is live, but speech captions could not start. You can type your explanation.',true);}
+  if(state.micWanted&&microphone.status==='live')captions.start();
 }
 $('micBtn').onclick=()=>{if(state.micWanted||microphone.status==='requesting'){stopMic();return;}enableMic();};
+$('retryCaptions').onclick=async()=>{captions.stop();if(microphone.status==='live')startCaptions();else await enableMic();};
+$('retryClassroom').onclick=()=>analyze();
 $('speakQuestion').onclick=()=>{if(!('speechSynthesis'in window)){notice('Speech playback is unavailable in this browser.');return;}speechSynthesis.cancel();speechSynthesis.speak(new SpeechSynthesisUtterance($('questionText').textContent));};
 window.addEventListener('pagehide',()=>{stopCamera();stopMic();});
-try{const response=await fetch('/api/config');if(!response.ok)throw Error();const config=await response.json();state.live=config.live;state.vision=config.vision;$('connection').textContent=config.live?'● AI connected':'● Demo mode';$('connection').title=config.live?config.model:'No API key configured';if(config.live)$('captureStatus').textContent=config.vision?'Selected board snapshots + explanation on analysis.':'Text-only mode · enable vision after verifying model support.';}catch{notice('Could not connect to the local server. Restart with npm start.',true);}
+try{const response=await fetch('/api/config');if(!response.ok)throw Error();const config=await response.json();state.live=config.live;state.vision=config.vision;$('connection').textContent=config.live?'● AI configured':'● Demo mode';$('notesLabel').textContent=config.live?'LIVE':'DEMO';$('connection').title=config.live?config.model:'No API key configured';if(config.live)$('captureStatus').textContent=config.vision?'Selected board snapshots + explanation on analysis.':'Text-only mode · enable vision after verifying model support.';}catch{notice('Could not connect to the local server. Restart with npm start.',true);}

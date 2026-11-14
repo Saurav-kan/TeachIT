@@ -1,4 +1,4 @@
 @echo off
 cd /d "%~dp0"
-node --env-file-if-exists=.env server.mjs
+node --use-system-ca --env-file-if-exists=.env server.mjs
 if errorlevel 1 pause

@@ -3,6 +3,6 @@
   "version": "0.1.0",
   "private": true,
   "type": "module",
-  "scripts": { "start": "node --env-file-if-exists=.env server.mjs", "test": "node --test test/*.test.mjs", "check": "node --check server.mjs && node --check public/app.js && node --check public/board.js && node --check public/microphone.js" },
-  "engines": { "node": ">=22" }
+  "scripts": { "start": "node --use-system-ca --env-file-if-exists=.env server.mjs", "test": "node --test test/*.test.mjs", "check": "node --check server.mjs && node --check public/app.js && node --check public/board.js && node --check public/microphone.js && node --check public/captions.js && node --check public/analysis-trigger.js" },
+  "engines": { "node": ">=24" }
 }

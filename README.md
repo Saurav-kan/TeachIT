@@ -4,11 +4,11 @@ A local startup prototype: learn by teaching a classroom of AI students.
 
 ## Run
 
-Requires Node.js 22+ (tested with Node 24). No dependencies to install.
+Requires Node.js 24+ (tested with Node 24). No dependencies to install.
 
 ```powershell
 cd C:\Users\kande\Desktop\Pitch2ProtoProjects\TeachIT
-node --env-file-if-exists=.env server.mjs
+node --use-system-ca --env-file-if-exists=.env server.mjs
 ```
 
 Open http://127.0.0.1:3210 in Chrome or Edge for camera and speech recognition support.
@@ -85,4 +85,13 @@ The running app now uses the vivid Cobalt Studio design in public/vivid.css, wit
 The teaching controls are above the lesson and stay pinned while scrolling. Start teaching requests microphone input; pause, finish and page exit release it. The icon shows a slashed microphone when muted and signal-driven bars when active. Green indicates detected input, amber a high digital level and red peaks near clipping. This is a digital amplitude guide, not a calibrated sound-pressure meter. The Web Audio analyser stays local and is never connected to speakers. Browser speech captions are a separate service; failures there are reported independently from the actual input state. In browsers without captions, the meter can remain live while the user types the explanation.
 
 The meter was verified in a browser using a generated test signal, without capturing the user's device. Automated checks cover signal levels, permission denial, canceled requests, device disconnects, track/context cleanup and browser callback binding. Real device access still depends on browser permission and hardware.
+
+
+## Transcription and classroom recovery
+
+Speech-to-text and AI processing now have separate status lines beside the top controls. Interim speech is displayed immediately; the last partial phrase is preserved on interruption and marked for review. The browser speech service reconnects automatically after ordinary disconnects or transient failures, with a bounded retry policy for repeated errors and a visible retry control. The explanation field grows with content up to a scrollable limit.
+
+Continuous speech no longer resets the analysis deadline. After enough finalized words, analysis is queued independently of further speech, with the existing 20-second request spacing. An AI failure stops automatic repeated requests until Retry analysis succeeds. Provider/network errors appear at the top instead of being mislabeled as bad lesson input.
+
+On this Windows system, OpenRouter initially failed with UNABLE_TO_VERIFY_LEAF_SIGNATURE. The startup scripts now use --use-system-ca, enabling the trusted system certificate store while keeping certificate verification on. No keys or certificate-validation bypasses are committed. A short real OpenRouter request returned a student question and four notes after this change. Use Start-TeachIT.cmd or the updated Node command above.
 
