@@ -26,17 +26,16 @@ You can also double-click `Start-TeachIT.cmd`. npm scripts are provided, but the
 
 ## Live AI
 
-Copy `.env.example` to `.env` and supply a provider key locally; never put it in frontend code or commit it. Restart the server after changes. The server uses the Responses API and supports a configurable OpenAI-compatible base URL and model ID.
+Copy `.env.example` to `.env` and set `OPENROUTER_API_KEY` locally; never put it in frontend code or commit it. Restart the server after changes. The server calls OpenRouter's Chat Completions API with structured text and image content parts.
 
-The example configuration selects the requested OpenCode Go `muse-spark-1.3-contributor` model and enables vision. Meta documents image support for this model. A key and model access are required; the OpenCode route still needs a real-account integration check. Set `OPENCODE_VISION=false` for text-only mode if the chosen route rejects image inputs. Camera frames are never sent. For pay-as-you-go access instead, use `muse-spark-1.3` and base URL `https://opencode.ai/inference/openai/v1`.
+The default model is `meta/muse-spark-1.3-contributor` at `https://openrouter.ai/api/v1/chat/completions`. OpenRouter lists image input support and $0.10/M input, $0.20/M output pricing. Contributor allows training on request data, which is accepted for this prototype. A funded OpenRouter account with model access is required. Vision is enabled by default; set `OPENROUTER_VISION=false` for text-only mode. Camera frames are never sent.
 
-OpenCode Go documents `muse-spark-1.3-contributor` at `https://opencode.ai/inference/go/openai/v1/responses`. Its listed token rates are $0.10/M input and $0.20/M output, counted against a paid Go allowance. Contributor allows training on request data, which is accepted for this prototype. Go is documented as intended for coding-agent traffic; classroom app compatibility/access needs verification rather than assuming the subscription is a general-purpose inference license. For an authorized endpoint, set `OPENCODE_MODEL` and `OPENCODE_BASE_URL` accordingly. The app identifies itself honestly as TeachIT.
+`OPENROUTER_MODEL` and `OPENROUTER_BASE_URL` can override the defaults. The server requests JSON output and validates it before returning classroom content. No paid requests have been made or verified yet.
 
 Official references (checked November 13, 2026):
 
-- https://dev.opencode.ai/docs/console/go/
-- https://dev.opencode.ai/docs/console/models/
-- https://dev.opencode.ai/docs/console/api/inference/
+- https://openrouter.ai/meta/muse-spark-1.3-contributor
+- https://openrouter.ai/docs/api/api-reference/chat/send-chat-completion-request
 - https://dev.meta.ai/docs/muse-spark
 
 No credentials are bundled. The live network integration is implemented but has not been verified against a paid provider account.
@@ -63,7 +62,7 @@ Camera is a local preview, not a recording or assessment input. Browser speech r
 node --check server.mjs
 node --check public/app.js
 node --check public/board.js
-node --test test/session.test.mjs
+node --test test/*.test.mjs
 ```
 
 The loopback server blocks cross-origin API requests, limits payload sizes, rate-limits live model requests, and keeps API credentials server-side. There is no remote configured until a repository is provided.
