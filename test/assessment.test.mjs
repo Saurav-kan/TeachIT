@@ -23,6 +23,13 @@ test('answer correctness needs a matching question and a real transcript quote',
   const result=parseResult(JSON.stringify({...response,answerAssessment:{questionId:'q1',status:'answered',evidence:'A made-up correct answer'}}),input);assert.equal(result.answerAssessment.status,'unaddressed');
   assert.equal(parseResult(JSON.stringify(response),{...input,questionContext:{id:'q2'}}).answerAssessment,null);
 });
+test('a cited misconception is resolved only by a later real correction',()=>{
+  const corrected={...input,transcript:input.transcript+' I meant glucose stores chemical energy.'};
+  const check={...response.factChecks[0],resolvedBy:'I meant glucose stores chemical energy.'};
+  assert.equal(parseResult(JSON.stringify({...response,factChecks:[check]}),corrected).factChecks[0].verdict,'corrected');
+  assert.equal(parseResult(JSON.stringify({...response,factChecks:[check]}),input).factChecks[0].verdict,'contradicted');
+  assert.equal(parseResult(JSON.stringify({...response,factChecks:[check]}),{...corrected,materials:''}).factChecks[0].verdict,'unverified');
+});
 test('automatic assessment does not depend on an acknowledgement button',()=>{
   const baseline='Plants use sunlight.';
   const current={id:'q1',student:'Maya',question:'How is energy stored?',baseline,status:'waiting'};

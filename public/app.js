@@ -2,7 +2,7 @@ import { Board } from './board.js';
 import { Microphone } from './microphone.js';
 import { Captions } from './captions.js';
 import { AnalysisTrigger } from './analysis-trigger.js';
-import { sourceDocuments } from './evidence.js';
+import { sourceDocuments, normalizeEvidence } from './evidence.js';
 import { advanceQuestion, answerSinceQuestion } from './questions.js';
 
 const $=id=>document.getElementById(id);
@@ -48,7 +48,6 @@ function renderNotes(){
 function applyResult(result,sentTranscript){
   state.lastResult=result;state.analyses++;
   for(const note of result.notes){const existing=state.notes.find(n=>n.term.toLowerCase()===note.term.toLowerCase());if(existing)existing.definition=note.definition;else state.notes.push(note);}
-  renderNotes();
   const previous=state.activeQuestion;
   state.activeQuestion=advanceQuestion(previous,result,sentTranscript,`question-${state.epoch}-${state.analyses}`);
   if(previous?.id===state.activeQuestion?.id&&previous.status!=='answered'&&state.activeQuestion.status==='answered'){
@@ -59,6 +58,8 @@ function applyResult(result,sentTranscript){
   renderQuestion(previous?.id!==state.activeQuestion?.id);
   state.factChecks??=[];
   for(const check of result.factChecks||[]){const index=state.factChecks.findIndex(c=>c.claim.toLowerCase()===check.claim.toLowerCase());if(index<0)state.factChecks.push(check);else state.factChecks[index]=check;}
+  for(const check of result.factChecks||[]){if(check.verdict==='corrected'&&check.resolvedBy){for(const note of state.notes){if(normalizeEvidence(note.definition).replace(/[.!?]+$/,'')===normalizeEvidence(check.claim).replace(/[.!?]+$/,''))note.definition=check.resolvedBy;}}}
+  renderNotes();
   renderFactChecks();
   if(result.hint)$('tip').textContent=result.hint;else $('tip').textContent=result.feedback;
   $('notesLabel').textContent=result.source==='demo'?'DEMO':'LIVE';
@@ -99,17 +100,19 @@ $('questionAlert').onclick=()=>{
 };
 $('acknowledgeQuestion').onclick=()=>{if(questionOpen()){state.activeQuestion.status='answering';renderQuestion();scheduleAnalysis();}};
 $('checkAnswer').onclick=()=>analyze();
+function orderedFactChecks(){const rank={contradicted:0,unverified:1,corrected:2,supported:3};return (state.factChecks||[]).slice(-8).reverse().sort((a,b)=>rank[a.verdict]-rank[b.verdict]);}
 function renderFactChecks(){
   const container=$('factChecks');container.replaceChildren();
   const withheld=state.mode==='test'&&!state.hints&&!state.reviewing;
   $('factCheckSummary').textContent=withheld?'Available after your test':!state.live?'Live source checks require an AI connection':!state.factChecks?.length?'No claims checked yet':'AI checks against your materials';
   if(withheld)return;
-  for(const check of (state.factChecks||[]).slice(-8).reverse()){
+  for(const check of orderedFactChecks()){
     const card=document.createElement('article');card.className=`fact-check ${check.verdict}`;
-    const label=document.createElement('strong');label.textContent=({contradicted:'↗ Conflicts with your material',supported:'✓ Supported by your material',unverified:'? Needs verification'})[check.verdict];
+    const label=document.createElement('strong');label.textContent=({contradicted:'↗ Conflicts with your material',corrected:'✓ Corrected in your explanation',supported:'✓ Supported by your material',unverified:'? Needs verification'})[check.verdict];
     const claim=document.createElement('p');claim.textContent=`“${check.claim}”`;
     const explanation=document.createElement('p');explanation.textContent=check.explanation;
     card.append(label,claim,explanation);
+    if(check.resolvedBy){const correction=document.createElement('p');correction.textContent=`You corrected this: “${check.resolvedBy}”`;card.append(correction);}
     if(!check.citations.length){const topic=document.createElement('small');topic.textContent=`Review: ${check.reviewTopic}. Add a relevant source to check this claim.`;card.append(topic);}
     for(const citation of check.citations){const button=document.createElement('button');button.className='source-link';button.textContent=`${citation.sourceName} · lines ${citation.lineStart}–${citation.lineEnd} ↗`;button.onclick=()=>openSource(citation);card.append(button);}
     container.append(card);
@@ -148,7 +151,7 @@ async function analyze(hint=false,automatic=false){
   try{
     let result;
     if(state.live){
-      const response=await fetch('/api/analyze',{method:'POST',headers:{'Content-Type':'application/json'},signal:AbortSignal.timeout(65000),body:JSON.stringify({topic:state.topic,materials:state.materials,transcript:transcript.slice(-20000),mode:state.mode,hints:state.mode==='learn'||state.hints,requestHint:hint,notes:state.notes.slice(-20),question:state.activeQuestion?.question,questionContext:questionOpen()?{id:state.activeQuestion.id,question:state.activeQuestion.question,student:state.activeQuestion.student,answerSinceQuestion:answerSinceQuestion(state.activeQuestion,transcript)}:null,events:state.boardVisible?board.events.slice(-100):[],board:image,previousBoard:includeBoard&&revision!==state.boardRevision?state.previousBoard:undefined,recencyBoard:includeBoard&&$('recencyInput').checked?board.snapshot(true):undefined})});
+      const response=await fetch('/api/analyze',{method:'POST',headers:{'Content-Type':'application/json'},signal:AbortSignal.timeout(65000),body:JSON.stringify({topic:state.topic,materials:state.materials,transcript:transcript.slice(-20000),mode:state.mode,hints:state.mode==='learn'||state.hints,requestHint:hint,notes:state.notes.slice(-20),question:state.activeQuestion?.question,claimsToRecheck:(state.factChecks||[]).filter(c=>c.verdict==='contradicted').slice(-3).map(c=>c.claim),questionContext:questionOpen()?{id:state.activeQuestion.id,question:state.activeQuestion.question,student:state.activeQuestion.student,answerSinceQuestion:answerSinceQuestion(state.activeQuestion,transcript)}:null,events:state.boardVisible?board.events.slice(-100):[],board:image,previousBoard:includeBoard&&revision!==state.boardRevision?state.previousBoard:undefined,recencyBoard:includeBoard&&$('recencyInput').checked?board.snapshot(true):undefined})});
       result=await response.json();if(!response.ok)throw Error(result.error||'Classroom analysis failed.');
     }else result=demoResult(hint);
     if(epoch!==state.epoch)return;
@@ -185,7 +188,7 @@ $('startBtn').onclick=async()=>{
 setInterval(renderClock,1000);
 function setMode(mode){if(state.running||state.elapsed>0)return;state.mode=mode;$('learnMode').classList.toggle('active',mode==='learn');$('testMode').classList.toggle('active',mode==='test');$('learnMode').setAttribute('aria-pressed',mode==='learn');$('testMode').setAttribute('aria-pressed',mode==='test');$('clockLabel').textContent=mode==='learn'?'Self-paced':'Time remaining';$('hintBtn').disabled=mode==='test'&&!state.hints;renderClock();renderFactChecks();}
 $('learnMode').onclick=()=>setMode('learn');$('testMode').onclick=()=>setMode('test');
-function finish(){pause();stopCamera();state.reviewing=true;renderFactChecks();$('reviewFactChecks').replaceChildren(...Array.from($('factChecks').children,c=>c.cloneNode(true)));$('reviewFactChecks').querySelectorAll('.source-link').forEach((button,i)=>{const refs=(state.factChecks||[]).slice(-8).reverse().flatMap(c=>c.citations);button.onclick=()=>openSource(refs[i]);});$('reviewScore').textContent=state.lastResult?.score==null?'—':`${state.lastResult.score}/100`;$('reviewFeedback').textContent=state.lastResult?.feedback||'No classroom feedback yet. Explain a topic and ask your students a question.';$('reviewConcepts').textContent=state.notes.length;$('reviewRequests').textContent=state.analyses;$('reviewSource').textContent=state.live?'Provisional AI practice feedback, not a validated exam grade. Integrity detection is not implemented.':'Demo results. No real AI grading or drawing interpretation. Integrity detection is not implemented.';$('reviewDialog').showModal();}
+function finish(){pause();stopCamera();state.reviewing=true;renderFactChecks();$('reviewFactChecks').replaceChildren(...Array.from($('factChecks').children,c=>c.cloneNode(true)));$('reviewFactChecks').querySelectorAll('.source-link').forEach((button,i)=>{const refs=orderedFactChecks().flatMap(c=>c.citations);button.onclick=()=>openSource(refs[i]);});$('reviewScore').textContent=state.lastResult?.score==null?'—':`${state.lastResult.score}/100`;$('reviewFeedback').textContent=state.lastResult?.feedback||'No classroom feedback yet. Explain a topic and ask your students a question.';$('reviewConcepts').textContent=state.notes.length;$('reviewRequests').textContent=state.analyses;$('reviewSource').textContent=state.live?'Provisional AI practice feedback, not a validated exam grade. Integrity detection is not implemented.':'Demo results. No real AI grading or drawing interpretation. Integrity detection is not implemented.';$('reviewDialog').showModal();}
 $('endBtn').onclick=finish;$('reviewNav').onclick=finish;
 $('analyzeBtn').onclick=()=>analyze();$('hintBtn').onclick=()=>analyze(true);
 $('transcript').oninput=()=>{state.changedAt=Date.now();resizeTranscript();scheduleAnalysis();};
