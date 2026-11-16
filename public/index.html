@@ -16,6 +16,7 @@
     <section class="session-bar" aria-label="Lesson controls"><div class="lesson-info"><span class="lesson-icon">↗</span><div><h2 id="lessonTitle">How photosynthesis works</h2></div></div><div class="mode-switch" aria-label="Learning mode"><button id="learnMode" class="active" aria-pressed="true">Learn IT</button><button id="testMode" aria-pressed="false">Test IT</button></div><div class="session-clock"><span class="clock-dot"></span><span id="clock">00:00</span><small id="clockLabel">Self-paced</small></div><button class="text-button" id="newLesson" title="New lesson">＋ New</button></section>
     <section class="session-controls teaching-dock" aria-label="Teaching and microphone controls">
       <button class="button primary" id="startBtn" aria-pressed="false">▶ Start</button>
+      <button class="button end-lesson" id="endBtn" title="Stop teaching and open your session review">■ End lesson</button>
       <div class="microphone-control">
         <button class="mic-toggle is-muted" id="micBtn" aria-label="Enable microphone" aria-pressed="false" aria-describedby="micStatus micLevelText">
           <svg class="microphone-symbol" viewBox="0 0 48 64" fill="none" aria-hidden="true">
@@ -37,7 +38,7 @@
         </button>
         <div class="mic-readout"><strong id="micStatus" role="status" aria-live="polite">Muted</strong><span id="micLevelText">Click the mic or start teaching</span><span class="mic-meter-legend"><i class="level-good"></i>Good <i class="level-warm"></i>High <i class="level-hot"></i>Too loud</span></div>
       </div>
-      <div class="dock-actions"><button class="button secondary" id="analyzeBtn">Ask students</button><div><button class="text-button" id="hintBtn">Hint</button><button class="text-button end-session" id="endBtn">Finish</button></div></div>
+      <div class="dock-actions"><button class="button secondary" id="analyzeBtn">Ask students</button><div><button class="text-button" id="hintBtn">Hint</button></div></div>
         <button class="question-alert" id="questionAlert" hidden aria-controls="questionCard"><span id="questionAlertIcon" aria-hidden="true">!</span><strong id="questionAlertText"></strong><span aria-hidden="true">View →</span></button>
 <details class="dock-status" id="statusDetails"><summary title="Speech and AI connection status">Status <span id="statusDot" aria-hidden="true"></span></summary>      <div class="pipeline-health" aria-label="Lesson processing status">
         <div><span>Speech to text</span><strong id="captionHealth" role="status">Muted</strong><button class="text-button" id="retryCaptions" hidden>Retry captions</button></div>

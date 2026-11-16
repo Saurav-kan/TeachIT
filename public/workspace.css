@@ -1,4 +1,5 @@
 /* Cobalt Studio: compact controls, a stable teaching surface, a readable reference rail. */
+.teaching-dock>.end-lesson{min-height:36px;padding:7px 10px;font-size:11px;color:#912C40;background:#FFF3F5;border:1px solid #DFA7B1;flex-shrink:0}
 :root{--sidebar:64px;--rail:330px;--workspace-gap:12px}
 body{height:100dvh;overflow:hidden}.sidebar{width:var(--sidebar);padding:17px 9px}.brand{font-size:0;margin:0 0 26px;display:grid;place-items:center;width:46px;height:34px}.brand::before{content:'T';font-size:26px;font-weight:750}.brand>span,.brand>b,.workspace-label,.sidebar-bottom,.nav-dot{display:none}.nav-item{justify-content:center;font-size:0;gap:0;padding:10px;margin-bottom:8px}.nav-item>span:first-child{font-size:21px}.sidebar::after{background-size:280px}
 .main-shell{height:100dvh;display:flex;flex-direction:column}.topbar{height:42px;min-height:42px;border-bottom:1px solid var(--line);padding:0 18px;font-size:11px}.status-pill{font-size:10px;padding:3px 7px}.top-actions{gap:10px}.topbar .icon-button{font-size:19px}.slash{margin:0 9px}
