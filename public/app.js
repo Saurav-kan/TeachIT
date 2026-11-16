@@ -228,11 +228,12 @@ $('sampleBtn').onclick=()=>{
   resizeTranscript();
   analyze();
 };
-function openSetup(){if(state.busy){notice('Wait for the classroom to finish thinking before changing your lesson.');return;}pause();$('topicInput').value=state.topic;$('materialsInput').value=state.materials;$('durationInput').value=state.duration/60;$('hintsInput').checked=state.hints;$('setupDialog').showModal();}
+function openSetup(){if(state.busy){notice('Wait for the classroom to finish thinking before changing your lesson.');return;}pause();$('topicInput').value=state.topic;$('materialsInput').value=state.materials;$('durationInput').value=state.duration/60;$('hintsInput').checked=state.hints;renderLessonImages();$('setupDialog').showModal();}
 $('newLesson').onclick=openSetup;$('settingsBtn').onclick=openSetup;$('materialsNav').onclick=openSetup;
 $('classroomNav').onclick=()=>window.scrollTo({top:0,behavior:'smooth'});
-$('setupForm').onsubmit=e=>{
-  e.preventDefault();const topic=$('topicInput').value.trim();if(!topic)return;
+let pendingLessonImages=[];
+$('setupForm').onsubmit=async e=>{
+  e.preventDefault();if(importingImages)return;const topic=$('topicInput').value.trim();if(!topic)return;
   state.epoch++;state.elapsed=0;state.lastCall=0;state.lastSent='';state.previousBoard=null;state.boardRevision=-1;state.notes=[];state.analyses=0;state.lastResult=null;state.autoBlocked=false;classroomStatus('Waiting for your explanation');$('recentSpeech').textContent='Your spoken words will appear here.';
   state.topic=topic;state.materials=$('materialsInput').value.slice(0,18000);state.duration=Number($('durationInput').value)*60;state.hints=$('hintsInput').checked;
   noteSnapshots.clear();noteOrder.clear();followNotes(true);referenceTab('notes');
@@ -242,8 +243,26 @@ $('setupForm').onsubmit=e=>{
   $('questionText').textContent='Start explaining, and your students will help you find the gaps.';$('questionLabel').textContent='A QUESTION IS A NEW CONNECTION';$('questionInitial').textContent='?';
   document.querySelectorAll('.student-card').forEach(el=>el.classList.remove('asking'));
   $('tip').textContent='Try explaining it like your students are hearing it for the first time.';
-  renderNotes();setMode(state.mode);updateRunning();$('setupDialog').close();notice('Lesson ready. Your classroom is yours.');
+  renderNotes();setMode(state.mode);updateRunning();
+  if(pendingLessonImages.length){$('setLesson').disabled=true;$('setLesson').textContent='Loading images…';try{imageLibrary.length=0;renderImageLibrary();await importImages(pendingLessonImages);pendingLessonImages=[];$('lessonImageUpload').value='';renderLessonImages();}finally{$('setLesson').disabled=false;$('setLesson').textContent='Set lesson →';}}
+  $('setupDialog').close();notice('Lesson ready. Your classroom is yours.');
 };
+let assignmentKind='people';
+const assignmentChoices={people:[['self','Saurav Kandel (myself)'],['jordan','Jordan Lee'],['avery','Avery Patel']],groups:[['study','Study group A'],['intro','Introduction to computing'],['ethics','Ethics seminar']]};
+const assignmentSelections={people:'self',groups:'study'};
+function assignmentTab(kind,focus=false){
+  assignmentSelections[assignmentKind]=$('assignmentSelect').value;assignmentKind=kind;
+  for(const name of ['people','groups']){const button=$(name==='people'?'assignPeople':'assignGroups');button.setAttribute('aria-selected',String(name===kind));button.tabIndex=name===kind?0:-1;}
+  $('assignmentSelect').replaceChildren(...assignmentChoices[kind].map(([value,label])=>new Option(label,value)));$('assignmentSelect').value=assignmentSelections[kind];
+  if(focus)$(kind==='people'?'assignPeople':'assignGroups').focus();
+}
+for(const kind of ['people','groups']){const button=$(kind==='people'?'assignPeople':'assignGroups');button.onclick=()=>assignmentTab(kind);button.onkeydown=e=>{if(['ArrowLeft','ArrowRight','Home','End'].includes(e.key)){e.preventDefault();assignmentTab(e.key==='Home'?'people':e.key==='End'?'groups':kind==='people'?'groups':'people',true);}};}
+function renderLessonImages(){
+  const names=pendingLessonImages.length?pendingLessonImages.map(file=>file.name):imageLibrary.map(item=>item.name);
+  $('lessonImageStatus').textContent=names.length?`${names.length} image${names.length===1?'':'s'} ready for the lesson library.`:'Available in the image library when the lesson opens.';
+  $('lessonImageList').replaceChildren(...names.map(name=>{const li=document.createElement('li');li.textContent=name;return li;}));
+}
+$('lessonImageUpload').onchange=e=>{pendingLessonImages=Array.from(e.target.files);renderLessonImages();};
 $('upload').onchange=async e=>{
   const files=Array.from(e.target.files);let text=$('materialsInput').value;
   for(const file of files){if(file.size>100000 || !/\.(txt|md)$/i.test(file.name)){notice('Please choose .txt or .md files smaller than 100 KB.',true);continue;}text+=`\n\n[Source: ${file.name.replace(/[\r\n\[\]]/g,'')}]\n${await file.text()}`;}
