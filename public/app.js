@@ -24,17 +24,18 @@ const questionOpen=()=>state.activeQuestion&&state.activeQuestion.status!=='answ
 const state={mode:'learn',running:false,elapsed:0,startTime:0,duration:600,hints:false,topic:'How photosynthesis works',materials:'',notes:[],analyses:0,lastResult:null,live:false,vision:false,busy:false,epoch:0,lastCall:0,lastSent:'',previousBoard:null,boardRevision:-1,changedAt:0,autoTimer:null,stream:null,recognition:null,micWanted:false,boardVisible:true};
 const microphone=new Microphone({onState:renderMicrophoneState,onLevel:renderMicrophoneLevel});
 const captions=new Captions({createRecognition:()=>{const Recognition=window.SpeechRecognition||window.webkitSpeechRecognition;if(!Recognition)throw Error('Unavailable');return new Recognition();},onText:receiveCaptionText,onState:renderCaptionState});
-const analysisTrigger=new AnalysisTrigger({ready:()=>(state.running||questionOpen())&&!state.busy&&!state.autoBlocked&&!board.current&&$('transcript').value.trim().split(/\s+/).length>=12&&signature()!==state.lastSent,run:()=>analyze(false,true),delay:()=>Math.max(1500,20000-(Date.now()-state.lastCall))});
+const analysisTrigger=new AnalysisTrigger({ready:()=>(state.running||questionOpen())&&!state.busy&&!state.autoBlocked&&!board.current&&!importingImages&&teachingText().trim().split(/\s+/).length>=12&&signature()!==state.lastSent,run:()=>analyze(false,true),delay:()=>Math.max(1500,20000-(Date.now()-state.lastCall))});
 const board=new Board($('whiteboard'),()=>{
-  $('boardEmpty').hidden=board.strokes.length>0;
+  $('boardEmpty').hidden=board.hasContent;
   $('boardState').textContent='Changes saved locally';
   state.changedAt=Date.now();scheduleAnalysis();
 });
 function notice(text,error=false){$('notice').textContent=text;$('notice').classList.toggle('error',error);}
-function signature(){return `${$('transcript').value.trim()}|${state.boardVisible?board.revision:'hidden'}`;}
+function teachingText(){return [$('transcript').value.trim(),state.boardVisible?$('writing').value.trim():''].filter(Boolean).join('\n\n');}
+function signature(){return `${teachingText()}|${state.boardVisible?board.revision:'hidden'}`;}
 function scheduleAnalysis(){
-  if((!state.running&&!questionOpen())||state.busy||state.autoBlocked)return;
-  const words=$('transcript').value.trim().split(/\s+/).filter(Boolean).length;
+  if((!state.running&&!questionOpen())||state.busy||state.autoBlocked||importingImages)return;
+  const words=teachingText().split(/\s+/).filter(Boolean).length;
   if(words<12){classroomStatus(`Waiting for explanation · ${words}/12 words`);return;}
   if(signature()===state.lastSent)return;
   classroomStatus('New explanation queued');analysisTrigger.request();
@@ -153,7 +154,7 @@ function openSource(citation){
   $('sourceDialog').showModal();$('sourceLines').querySelector('.cited')?.scrollIntoView({block:'center'});
 }
 function demoResult(hint){
-  const text=$('transcript').value.trim();
+  const text=teachingText();
   const sample=state.topic.toLowerCase().includes('photosynthesis')&&/chlorophyll/i.test(text);
   const sentences=text.match(/[^.!?]+[.!?]?/g)||[text];
   let notes=sentences.slice(0,4).map((s,i)=>({term:`Idea ${i+1}`,definition:s.trim()}));
@@ -168,18 +169,19 @@ function demoResult(hint){
 async function analyze(hint=false,automatic=false){
   if(state.busy)return;
   if(state.mode==='test'&&hint&&!state.hints)return;
-  const transcript=$('transcript').value.trim();
-  if(transcript.length<20){if(!automatic){classroomStatus('Add a few sentences first');notice('Add a few sentences first so your students have something to ask about.');}return;}
+  const transcript=$('transcript').value.trim(),writing=state.boardVisible?$('writing').value.trim():'';
+  const explanation=teachingText();
+  if(explanation.length<20){if(!automatic){classroomStatus('Add a few sentences first');notice('Add a few sentences first so your students have something to ask about.');}return;}
   if(state.live && Date.now()-state.lastCall<20000){if(!automatic)notice('Let’s give the next explanation a little room. Please wait 20 seconds between analyses.');scheduleAnalysis();return;}
   const epoch=state.epoch;state.autoBlocked=false;state.busy=true;state.lastCall=Date.now();analysisTrigger.cancel();classroomStatus('Reading your explanation…');
-  const sentSignature=signature();const sentTranscript=transcript;const revision=board.revision;
-  const includeBoard=state.vision&&state.boardVisible&&(board.strokes.length>0||state.previousBoard);
+  const sentSignature=signature();const sentTranscript=explanation;const revision=board.revision;
+  const includeBoard=state.vision&&state.boardVisible&&(board.hasContent||state.previousBoard);
   const image=includeBoard?board.snapshot():undefined;
   $('analyzeBtn').disabled=true;$('hintBtn').disabled=true;$('analyzeBtn').textContent='Thinking…';
   try{
     let result;
     if(state.live){
-      const response=await fetch('/api/analyze',{method:'POST',headers:{'Content-Type':'application/json'},signal:AbortSignal.timeout(65000),body:JSON.stringify({topic:state.topic,materials:state.materials,transcript:transcript.slice(-20000),mode:state.mode,hints:state.mode==='learn'||state.hints,requestHint:hint,notes:state.notes.slice(-20),question:state.activeQuestion?.question,claimsToRecheck:(state.factChecks||[]).filter(c=>c.verdict==='contradicted').slice(-3).map(c=>c.claim),questionContext:questionOpen()?{id:state.activeQuestion.id,question:state.activeQuestion.question,student:state.activeQuestion.student,answerSinceQuestion:answerSinceQuestion(state.activeQuestion,transcript)}:null,events:state.boardVisible?board.events.slice(-100):[],board:image,previousBoard:includeBoard&&revision!==state.boardRevision?state.previousBoard:undefined,recencyBoard:includeBoard&&$('recencyInput').checked?board.snapshot(true):undefined})});
+      const response=await fetch('/api/analyze',{method:'POST',headers:{'Content-Type':'application/json'},signal:AbortSignal.timeout(65000),body:JSON.stringify({topic:state.topic,materials:state.materials,transcript:transcript.slice(-20000),writing:writing.slice(-20000),mode:state.mode,hints:state.mode==='learn'||state.hints,requestHint:hint,notes:state.notes.slice(-20),question:state.activeQuestion?.question,claimsToRecheck:(state.factChecks||[]).filter(c=>c.verdict==='contradicted').slice(-3).map(c=>c.claim),questionContext:questionOpen()?{id:state.activeQuestion.id,question:state.activeQuestion.question,student:state.activeQuestion.student,answerSinceQuestion:answerSinceQuestion(state.activeQuestion,explanation)}:null,events:state.boardVisible?board.events.slice(-100):[],board:image,previousBoard:includeBoard&&revision!==state.boardRevision?state.previousBoard:undefined,recencyBoard:includeBoard&&$('recencyInput').checked?board.snapshot(true):undefined})});
       result=await response.json();if(!response.ok)throw Error(result.error||'Classroom analysis failed.');
     }else result=demoResult(hint);
     if(epoch!==state.epoch)return;
@@ -236,7 +238,7 @@ $('setupForm').onsubmit=e=>{
   noteSnapshots.clear();noteOrder.clear();followNotes(true);referenceTab('notes');
   state.activeQuestion=null;state.factChecks=[];state.answerHistory=[];state.reviewing=false;document.body.classList.remove('question-answered');$('answerReceipt').hidden=true;$('answerStatus').hidden=true;$('answerFeedback').hidden=true;$('answerEvidence').hidden=true;$('checkAnswer').hidden=true;renderFactChecks();
   setQuestionPending(false);
-  board.clear();$('transcript').value='';$('lessonTitle').textContent=topic;$('transcript').placeholder=`How would you explain ${topic.toLowerCase()}?`;
+  board.reset();$('writing').value='';$('writingCount').textContent='0 words';teachingSurface('drawing');$('transcript').value='';$('lessonTitle').textContent=topic;$('transcript').placeholder=`How would you explain ${topic.toLowerCase()}?`;
   $('questionText').textContent='Start explaining, and your students will help you find the gaps.';$('questionLabel').textContent='A QUESTION IS A NEW CONNECTION';$('questionInitial').textContent='?';
   document.querySelectorAll('.student-card').forEach(el=>el.classList.remove('asking'));
   $('tip').textContent='Try explaining it like your students are hearing it for the first time.';
@@ -250,14 +252,63 @@ $('upload').onchange=async e=>{
 document.querySelectorAll('[data-close]').forEach(button=>button.onclick=()=>button.closest('dialog').close());
 $('toggleBoard').onclick=()=>{state.boardVisible=!state.boardVisible;$('boardCard').classList.toggle('board-hidden',!state.boardVisible);$('toggleBoard').textContent=state.boardVisible?'Hide board ↗':'Show board ↗';$('toggleBoard').setAttribute('aria-expanded',String(state.boardVisible));$('boardOff').hidden=state.boardVisible;if(state.boardVisible)board.render();};
 $('toggleNotes').onclick=()=>{const content=$('notebookContent');content.hidden=!content.hidden;const button=$('toggleNotes');button.setAttribute('aria-expanded',String(!content.hidden));button.setAttribute('aria-label',content.hidden?'Expand student notes':'Collapse student notes');button.textContent=content.hidden?'+':'−';button.closest('.notes-card').classList.toggle('notes-collapsed',content.hidden);};
-$('pen').onclick=()=>{board.tool='pen';$('pen').classList.add('active');$('eraser').classList.remove('active');$('pen').setAttribute('aria-pressed','true');$('eraser').setAttribute('aria-pressed','false');};
-$('eraser').onclick=()=>{board.tool='eraser';$('eraser').classList.add('active');$('pen').classList.remove('active');$('eraser').setAttribute('aria-pressed','true');$('pen').setAttribute('aria-pressed','false');};
+$('pen').onclick=()=>{board.setTool('pen');$('selectImage').classList.remove('active');$('selectImage').setAttribute('aria-pressed','false');$('pen').classList.add('active');$('eraser').classList.remove('active');$('pen').setAttribute('aria-pressed','true');$('eraser').setAttribute('aria-pressed','false');};
+$('eraser').onclick=()=>{board.setTool('eraser');$('selectImage').classList.remove('active');$('selectImage').setAttribute('aria-pressed','false');$('eraser').classList.add('active');$('pen').classList.remove('active');$('eraser').setAttribute('aria-pressed','true');$('pen').setAttribute('aria-pressed','false');};
 document.querySelectorAll('[data-color]').forEach(button=>{button.setAttribute('aria-pressed',String(button.classList.contains('active')));button.onclick=()=>{board.color=button.dataset.color;$('pen').click();document.querySelectorAll('[data-color]').forEach(b=>{b.classList.toggle('active',b===button);b.setAttribute('aria-pressed',String(b===button));});};});
 $('undo').onclick=()=>board.undo();$('clear').onclick=()=>board.clear();
 $('recencyBtn').onclick=()=>{$('aiPreview').src=board.snapshot(true);$('aiDialog').showModal();};
+function teachingSurface(name,focus=false){
+  for(const key of ['drawing','writing']){const selected=key===name;$(`${key}Tab`).setAttribute('aria-selected',String(selected));$(`${key}Tab`).tabIndex=selected?0:-1;$(`${key}Pane`).hidden=!selected;}
+  if(focus)$(`${name}Tab`).focus();if(name==='drawing')board.render();
+}
+for(const key of ['drawing','writing']){
+  $(`${key}Tab`).onclick=()=>teachingSurface(key);
+  $(`${key}Tab`).onkeydown=e=>{if(['ArrowLeft','ArrowRight','Home','End'].includes(e.key)){e.preventDefault();teachingSurface(e.key==='Home'?'drawing':e.key==='End'?'writing':key==='drawing'?'writing':'drawing',true);}};
+}
+$('writing').oninput=()=>{const words=$('writing').value.trim().split(/\s+/).filter(Boolean).length;$('writingCount').textContent=`${words} word${words===1?'':'s'}`;state.changedAt=Date.now();scheduleAnalysis();};
+function selectImages(){board.setTool('select');for(const id of ['pen','eraser','selectImage']){$(id).classList.toggle('active',id==='selectImage');$(id).setAttribute('aria-pressed',String(id==='selectImage'));}board.canvas.focus({preventScroll:true});}
+$('selectImage').onclick=selectImages;
+function imageControls(){
+  const image=board.selected,list=$('imageLayerList');$('imageControls').hidden=!board.images.length;list.replaceChildren();
+  const placeholder=document.createElement('option');placeholder.value='';placeholder.textContent='Select an image';list.append(placeholder);
+  for(const item of [...board.images].reverse()){const option=document.createElement('option');option.value=item.id;option.textContent=item.name;list.append(option);}
+  list.value=image?.id||'';
+  for(const id of ['imageBackward','imageForward','imageBack','imageFront','deleteImage'])$(id).disabled=!image;
+  if(image){$('imageBackward').disabled=$('imageBack').disabled=board.elements.indexOf(image)===0;$('imageForward').disabled=$('imageFront').disabled=board.elements.indexOf(image)===board.elements.length-1;}
+}
+board.onSelection=imageControls;
+$('imageLayerList').onchange=()=>{selectImages();board.select($('imageLayerList').value||null);};
+for(const [id,direction] of [['imageBackward','backward'],['imageForward','forward'],['imageBack','back'],['imageFront','front']])$(id).onclick=()=>board.layer(direction);
+$('deleteImage').onclick=()=>board.deleteSelected();
+let importingImages=false;
+async function importImages(files,position){
+  if(importingImages)return;const epoch=state.epoch;importingImages=true;$('addImage').disabled=true;$('addImage').textContent='Loading…';
+  try{
+    for(const file of Array.from(files)){
+      if(epoch!==state.epoch)break;
+      if(board.images.length>=12){notice('The board can hold 12 images. Remove an image before adding another.',true);break;}
+      if(!['image/png','image/jpeg','image/webp'].includes(file.type)||file.size>10*1024*1024){notice('Choose PNG, JPG or WebP images up to 10 MB each.',true);continue;}
+      const url=URL.createObjectURL(file);
+      try{
+        const source=new Image();source.src=url;await source.decode();
+        if(source.width*source.height>36000000)throw Error('This image is too large. Use an image smaller than 36 megapixels.');
+        const scale=Math.min(1,1600/Math.max(source.width,source.height)),canvas=document.createElement('canvas');canvas.width=Math.max(1,Math.round(source.width*scale));canvas.height=Math.max(1,Math.round(source.height*scale));canvas.getContext('2d').drawImage(source,0,0,canvas.width,canvas.height);
+        const image=new Image();image.src=canvas.toDataURL('image/png');await image.decode();
+        const maskCanvas=document.createElement('canvas'),ratio=Math.min(1,384/Math.max(image.width,image.height));maskCanvas.width=Math.max(1,Math.round(image.width*ratio));maskCanvas.height=Math.max(1,Math.round(image.height*ratio));const ctx=maskCanvas.getContext('2d',{willReadFrequently:true});ctx.drawImage(image,0,0,maskCanvas.width,maskCanvas.height);const mask=ctx.getImageData(0,0,maskCanvas.width,maskCanvas.height);
+        if(epoch!==state.epoch)break;teachingSurface('drawing');board.addImage(image,file.name,mask,position);selectImages();
+      }catch(error){notice(error.message||'This image could not be opened. Try another PNG or JPG.',true);}
+      finally{URL.revokeObjectURL(url);}
+    }
+  }finally{importingImages=false;$('addImage').disabled=false;$('addImage').textContent='＋ Image';$('imageUpload').value='';scheduleAnalysis();}
+}
+$('addImage').onclick=()=>$('imageUpload').click();
+$('imageUpload').onchange=e=>importImages(e.target.files);
+for(const event of ['dragenter','dragover'])$('boardWrap').addEventListener(event,e=>{if(e.dataTransfer.types.includes('Files')){e.preventDefault();e.dataTransfer.dropEffect='copy';$('boardWrap').classList.add('drop-ready');}});
+$('boardWrap').addEventListener('dragleave',e=>{if(!$('boardWrap').contains(e.relatedTarget))$('boardWrap').classList.remove('drop-ready');});
+$('boardWrap').addEventListener('drop',e=>{e.preventDefault();$('boardWrap').classList.remove('drop-ready');const rect=$('whiteboard').getBoundingClientRect();importImages(e.dataTransfer.files,[(e.clientX-rect.left)/rect.width,(e.clientY-rect.top)/rect.height]);});
 function download(){
   const exportChecks=state.mode==='test'&&!state.hints&&!state.reviewing?[]:(state.factChecks||[]);
-  const content=`# ${state.topic}\n\nMode: ${state.mode==='learn'?'Learn IT':'Test IT'}\nSource: ${state.live?'AI classroom':'Scripted demo'}\n\n## Student notes\n\n${state.notes.map(n=>`### ${n.term}\n${n.definition}`).join('\n\n')}\n\n## Latest question\n${state.activeQuestion?.question||'No question yet.'}\n\n## Feedback\n${state.lastResult?.feedback||'No feedback yet.'}\n\n## Answer status\n${state.activeQuestion?.status||'No question yet'}\n${state.activeQuestion?.feedback||''}\n\n## Answered questions\n${(state.answerHistory||[]).map(q=>q.question+' — '+q.feedback).join('\n')}\n\n## Fact checks (AI assessment against lesson materials)\n${exportChecks.map(c=>c.verdict+': '+c.claim+'\n'+c.explanation+'\n'+c.citations.map(r=>r.sourceName+' lines '+r.lineStart+'–'+r.lineEnd+': '+r.quote).join('\n')).join('\n\n')}\n\n## Explanation\n${$('transcript').value}\n`;
+  const content=`# ${state.topic}\n\nMode: ${state.mode==='learn'?'Learn IT':'Test IT'}\nSource: ${state.live?'AI classroom':'Scripted demo'}\n\n## Student notes\n\n${state.notes.map(n=>`### ${n.term}\n${n.definition}`).join('\n\n')}\n\n## Latest question\n${state.activeQuestion?.question||'No question yet.'}\n\n## Feedback\n${state.lastResult?.feedback||'No feedback yet.'}\n\n## Answer status\n${state.activeQuestion?.status||'No question yet'}\n${state.activeQuestion?.feedback||''}\n\n## Answered questions\n${(state.answerHistory||[]).map(q=>q.question+' — '+q.feedback).join('\n')}\n\n## Fact checks (AI assessment against lesson materials)\n${exportChecks.map(c=>c.verdict+': '+c.claim+'\n'+c.explanation+'\n'+c.citations.map(r=>r.sourceName+' lines '+r.lineStart+'–'+r.lineEnd+': '+r.quote).join('\n')).join('\n\n')}\n\n## Written explanation\n${$('writing').value}\n\n## Spoken explanation\n${$('transcript').value}\n`;
   const url=URL.createObjectURL(new Blob([content],{type:'text/markdown'}));const a=document.createElement('a');a.href=url;a.download='TeachIT-session.md';a.click();setTimeout(()=>URL.revokeObjectURL(url),1000);
 }
 $('download').onclick=download;$('reviewDownload').onclick=download;
