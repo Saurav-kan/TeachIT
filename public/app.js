@@ -281,12 +281,29 @@ $('imageLayerList').onchange=()=>{selectImages();board.select($('imageLayerList'
 for(const [id,direction] of [['imageBackward','backward'],['imageForward','forward'],['imageBack','back'],['imageFront','front']])$(id).onclick=()=>board.layer(direction);
 $('deleteImage').onclick=()=>board.deleteSelected();
 let importingImages=false;
+const imageLibrary=[];
+function placeLibraryImage(id,position){
+  const item=imageLibrary.find(item=>item.id===id);if(!item)return;
+  if(board.images.length>=12){notice('The board can hold 12 images. Delete one to add another.',true);return;}
+  teachingSurface('drawing');board.addImage(item.image,item.name,item.mask,position);selectImages();
+}
+function renderImageLibrary(){
+  $('imageLibraryItems').replaceChildren();$('imageLibraryEmpty').hidden=!!imageLibrary.length;
+  for(const item of imageLibrary){
+    const button=document.createElement('button');button.className='library-image';button.draggable=true;button.title=`Add ${item.name}`;button.setAttribute('aria-label',`Add ${item.name} to board`);
+    const thumbnail=document.createElement('img');thumbnail.src=item.image.src;thumbnail.alt='';thumbnail.draggable=false;
+    const label=document.createElement('span');label.textContent=item.name.replace(/\.[^.]+$/,'');button.append(thumbnail,label);
+    button.onclick=()=>placeLibraryImage(item.id);
+    button.ondragstart=e=>{e.dataTransfer.setData('application/x-teachit-image',item.id);e.dataTransfer.effectAllowed='copy';};
+    $('imageLibraryItems').append(button);
+  }
+}
 async function importImages(files,position){
   if(importingImages)return;const epoch=state.epoch;importingImages=true;$('addImage').disabled=true;$('addImage').textContent='Loading…';
   try{
     for(const file of Array.from(files)){
       if(epoch!==state.epoch)break;
-      if(board.images.length>=12){notice('The board can hold 12 images. Remove an image before adding another.',true);break;}
+      if(imageLibrary.length>=24){notice('The image library can hold 24 images.',true);break;}
       if(!['image/png','image/jpeg','image/webp'].includes(file.type)||file.size>10*1024*1024){notice('Choose PNG, JPG or WebP images up to 10 MB each.',true);continue;}
       const url=URL.createObjectURL(file);
       try{
@@ -295,7 +312,7 @@ async function importImages(files,position){
         const scale=Math.min(1,1600/Math.max(source.width,source.height)),canvas=document.createElement('canvas');canvas.width=Math.max(1,Math.round(source.width*scale));canvas.height=Math.max(1,Math.round(source.height*scale));canvas.getContext('2d').drawImage(source,0,0,canvas.width,canvas.height);
         const image=new Image();image.src=canvas.toDataURL('image/png');await image.decode();
         const maskCanvas=document.createElement('canvas'),ratio=Math.min(1,384/Math.max(image.width,image.height));maskCanvas.width=Math.max(1,Math.round(image.width*ratio));maskCanvas.height=Math.max(1,Math.round(image.height*ratio));const ctx=maskCanvas.getContext('2d',{willReadFrequently:true});ctx.drawImage(image,0,0,maskCanvas.width,maskCanvas.height);const mask=ctx.getImageData(0,0,maskCanvas.width,maskCanvas.height);
-        if(epoch!==state.epoch)break;teachingSurface('drawing');board.addImage(image,file.name,mask,position);selectImages();
+        if(epoch!==state.epoch)break;const item={id:crypto.randomUUID(),image,name:file.name,mask};imageLibrary.push(item);renderImageLibrary();if(position)placeLibraryImage(item.id,position);
       }catch(error){notice(error.message||'This image could not be opened. Try another PNG or JPG.',true);}
       finally{URL.revokeObjectURL(url);}
     }
@@ -303,19 +320,20 @@ async function importImages(files,position){
 }
 $('addImage').onclick=()=>$('imageUpload').click();
 $('imageUpload').onchange=e=>importImages(e.target.files);
-for(const event of ['dragenter','dragover'])$('boardWrap').addEventListener(event,e=>{if(e.dataTransfer.types.includes('Files')){e.preventDefault();e.dataTransfer.dropEffect='copy';$('boardWrap').classList.add('drop-ready');}});
+for(const event of ['dragenter','dragover'])$('boardWrap').addEventListener(event,e=>{if(e.dataTransfer.types.includes('Files')||e.dataTransfer.types.includes('application/x-teachit-image')){e.preventDefault();e.dataTransfer.dropEffect='copy';$('boardWrap').classList.add('drop-ready');}});
 $('boardWrap').addEventListener('dragleave',e=>{if(!$('boardWrap').contains(e.relatedTarget))$('boardWrap').classList.remove('drop-ready');});
-$('boardWrap').addEventListener('drop',e=>{e.preventDefault();$('boardWrap').classList.remove('drop-ready');const rect=$('whiteboard').getBoundingClientRect();importImages(e.dataTransfer.files,[(e.clientX-rect.left)/rect.width,(e.clientY-rect.top)/rect.height]);});
+$('boardWrap').addEventListener('drop',e=>{e.preventDefault();$('boardWrap').classList.remove('drop-ready');const rect=$('whiteboard').getBoundingClientRect(),position=[(e.clientX-rect.left)/rect.width,(e.clientY-rect.top)/rect.height],id=e.dataTransfer.getData('application/x-teachit-image');if(id)placeLibraryImage(id,position);else importImages(e.dataTransfer.files,position);});
 function download(){
   const exportChecks=state.mode==='test'&&!state.hints&&!state.reviewing?[]:(state.factChecks||[]);
   const content=`# ${state.topic}\n\nMode: ${state.mode==='learn'?'Learn IT':'Test IT'}\nSource: ${state.live?'AI classroom':'Scripted demo'}\n\n## Student notes\n\n${state.notes.map(n=>`### ${n.term}\n${n.definition}`).join('\n\n')}\n\n## Latest question\n${state.activeQuestion?.question||'No question yet.'}\n\n## Feedback\n${state.lastResult?.feedback||'No feedback yet.'}\n\n## Answer status\n${state.activeQuestion?.status||'No question yet'}\n${state.activeQuestion?.feedback||''}\n\n## Answered questions\n${(state.answerHistory||[]).map(q=>q.question+' — '+q.feedback).join('\n')}\n\n## Fact checks (AI assessment against lesson materials)\n${exportChecks.map(c=>c.verdict+': '+c.claim+'\n'+c.explanation+'\n'+c.citations.map(r=>r.sourceName+' lines '+r.lineStart+'–'+r.lineEnd+': '+r.quote).join('\n')).join('\n\n')}\n\n## Written explanation\n${$('writing').value}\n\n## Spoken explanation\n${$('transcript').value}\n`;
   const url=URL.createObjectURL(new Blob([content],{type:'text/markdown'}));const a=document.createElement('a');a.href=url;a.download='TeachIT-session.md';a.click();setTimeout(()=>URL.revokeObjectURL(url),1000);
 }
 $('download').onclick=download;$('reviewDownload').onclick=download;
-function stopCamera(){state.stream?.getTracks().forEach(track=>track.stop());state.stream=null;$('camera').srcObject=null;$('camera').hidden=true;$('cameraPlaceholder').hidden=false;$('cameraStop').hidden=true;}
+function stopCamera(){state.stream?.getTracks().forEach(track=>track.stop());state.stream=null;$('camera').srcObject=null;$('camera').hidden=true;$('cameraPlaceholder').hidden=false;$('cameraStop').hidden=true;$('cameraStart').textContent='▣ Camera';$('cameraStart').setAttribute('aria-label','Enable camera');$('cameraStart').setAttribute('aria-pressed','false');}
 $('cameraStart').onclick=async()=>{
+  if(state.stream){stopCamera();return;}
   if(!navigator.mediaDevices?.getUserMedia){notice('Camera access is unavailable here. Try opening the classroom in Edge or Chrome.',true);return;}
-  try{state.stream=await navigator.mediaDevices.getUserMedia({video:true,audio:false});$('camera').srcObject=state.stream;$('camera').hidden=false;$('cameraPlaceholder').hidden=true;$('cameraStop').hidden=false;notice('Camera preview is local. Video is not recorded or sent to the model.');}catch{notice('Camera access was not granted. You can keep teaching without it.',true);}
+  try{state.stream=await navigator.mediaDevices.getUserMedia({video:true,audio:false});$('camera').srcObject=state.stream;$('camera').hidden=false;$('cameraPlaceholder').hidden=true;$('cameraStop').hidden=false;$('cameraStart').textContent='▣ Camera on';$('cameraStart').setAttribute('aria-label','Turn camera off');$('cameraStart').setAttribute('aria-pressed','true');notice('Camera preview is local. Video is not recorded or sent to the model.');}catch{notice('Camera access was not granted. You can keep teaching without it.',true);}
 };
 $('cameraStop').onclick=stopCamera;
 function stopCaptions(){captions.stop();}
